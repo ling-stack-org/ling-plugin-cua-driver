@@ -6,4 +6,6 @@ The committed [provider lock](../provider/0.8.3-ling.1/provider-lock.json) autho
 
 The Provider native build workflow checks the locked inputs, runs two independent builds and compares their output. The macOS runner must expose the exact Xcode and SDK in the source inputs. The Windows job provisions Microsoft Build Tools 17.14.36, Visual Studio build `17.14.37502.11`. The Windows candidate pins the observed MSVC toolset directory `14.44.35207`, the selected compiler product version `14.44.35228.0`, and the SDK. The downloadable workflow outputs are pre-sign candidates.
 
+The Windows native test opens the managed MCP session for each child with `initialize` and `ling/managed_readiness` before calling configuration tools. Positive acceptance requires the host and provider to share an unlocked interactive Windows session.
+
 A reviewed, signed runtime tree preserves the Ling resource layout under `runtime/providers/cua-driver/<distribution-revision>/`. Include the lock, license and notices, the native binary, the provider seal, and the Windows integrity catalog when applicable. Publish the platform archive with its provenance and submit its immutable release URL to the [official catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).

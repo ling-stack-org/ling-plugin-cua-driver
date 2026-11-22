@@ -401,10 +401,10 @@ index 6aabae5..25c9745 100644
      }
 diff --git a/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
 new file mode 100644
-index 0000000..aea8e61
+index 0000000..40435b2
 --- /dev/null
 +++ b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
-@@ -0,0 +1,474 @@
+@@ -0,0 +1,487 @@
 +#![cfg(debug_assertions)]
 +
 +use serde_json::{json, Value};
@@ -503,6 +503,7 @@ index 0000000..aea8e61
 +    }
 +
 +    fn request(&mut self, id: u64, method: &str, params: Value) -> Value {
++        let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("-");
 +        let request = json!({
 +            "jsonrpc": "2.0",
 +            "id": id,
@@ -518,7 +519,9 @@ index 0000000..aea8e61
 +            let value = self
 +                .responses
 +                .recv_timeout(remaining)
-+                .expect("provider response timed out");
++                .unwrap_or_else(|error| {
++                    panic!("provider response timed out for {method} ({tool_name}): {error}")
++                });
 +            if value.get("id").and_then(Value::as_u64) == Some(id) {
 +                return value;
 +            }
@@ -538,6 +541,7 @@ index 0000000..aea8e61
 +        let notification = json!({
 +            "jsonrpc": "2.0",
 +            "method": "notifications/initialized",
++            "params": {},
 +        });
 +        let stdin = self.stdin.as_mut().expect("provider stdin open");
 +        writeln!(stdin, "{notification}").expect("write MCP initialized notification");
@@ -610,7 +614,16 @@ index 0000000..aea8e61
 +    let health = second.request(
 +        3,
 +        "tools/call",
-+        json!({"name": "health_report", "arguments": {}}),
++        json!({
++            "name": "health_report",
++            "arguments": { "skip": [
++                "ax_capability",
++                "bundle_identity",
++                "screen_capture_capability",
++                "tcc_accessibility",
++                "tcc_screen_recording"
++            ] },
++        }),
 +    );
 +    assert!(health.pointer("/result/structuredContent").is_some());
 +    assert!(second.close_stdin_and_wait().success());

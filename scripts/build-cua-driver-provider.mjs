@@ -21,10 +21,7 @@ import {
   verifyVersionOutput,
 } from "./cua-driver-binary-identity.mjs";
 import { acquireReferenceArtifact } from "./cua-driver-reference-artifacts.mjs";
-import {
-  mergeEnvironment,
-  verifyToolchain,
-} from "./cua-driver-source-build-toolchain.mjs";
+import { verifyToolchain } from "./cua-driver-source-build-toolchain.mjs";
 import { probeCuaDriverProvider, sha256Text } from "./probe-cua-driver-provider.mjs";
 import { normalizeCuaDriverSwiftArchives } from "./cua-driver-swift-archive-normalizer.mjs";
 import {
@@ -76,6 +73,9 @@ if (args["verify-only"]) {
 }
 
 const toolchain = await verifyToolchain(platform, lock);
+// Cargo and the native publisher used by the runtime probe share this CLI's
+// verified developer environment.
+Object.assign(process.env, toolchain.env);
 const { referenceRoot: _referenceRoot, ...referenceArtifact } = await acquireReferenceArtifact({
   platform,
   lock,
@@ -85,7 +85,7 @@ await acquireSource(sourceRoot, verifiedInputs);
 await applyPatchSeries(sourceRoot, verifiedInputs);
 
 const workspace = join(sourceRoot, lock.upstream.workspaceRoot);
-const buildEnvValue = buildEnv(sourceRoot, targetDirectory, lock, platform, toolchain.env);
+const buildEnvValue = buildEnv(sourceRoot, targetDirectory, lock, platform);
 await run(
   "cargo",
   ["+" + lock.toolchain.rustcVersion, "fetch", "--locked", "--manifest-path", join(workspace, "Cargo.toml")],
@@ -542,22 +542,16 @@ function buildEnv(
   targetDirectoryValue,
   lockValue,
   platformValue,
-  toolchainEnvironment = {},
 ) {
   const remap = `--remap-path-prefix=${sourceRootValue}=/usr/src/cua-driver`;
   // These flags also compile host build scripts, so they must leave those tools executable.
   // Darwin's linker emits an LC_UUID derived from output bytes by default. Keep that
   // default: suppressing the UUID breaks modern dyld, while randomization breaks replay.
   const flags = ["-C", "debuginfo=0", remap];
-  const environment = mergeEnvironment(
-    process.env,
-    toolchainEnvironment,
-    platformValue === "win32-x64",
-  );
   return {
     cwd: sourceRootValue,
     env: {
-      ...environment,
+      ...process.env,
       CARGO_TARGET_DIR: targetDirectoryValue,
       CARGO_INCREMENTAL: "0",
       SOURCE_DATE_EPOCH: String(lockValue.upstream.sourceDateEpoch),

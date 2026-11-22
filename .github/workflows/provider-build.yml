@@ -33,6 +33,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 22.22.1
+      - name: Prepare the locked Rust toolchain
+        run: |
+          rust_version=$(node -p 'require("./provider/0.8.3-ling.1/source-build-inputs.json").toolchain.rustcVersion')
+          rustup toolchain install "$rust_version" --profile minimal --component rustfmt
       - name: Build and verify the locked source
         run: |
           node scripts/build-cua-driver-provider.mjs --platform "$PROVIDER_TARGET" --work-dir "$RUNNER_TEMP/cua-build" --output-dir "$GITHUB_WORKSPACE/provider-output"

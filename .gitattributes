@@ -1,0 +1,2 @@
+# Provider inputs and patches are bound to their Git byte digests.
+/provider/** -text

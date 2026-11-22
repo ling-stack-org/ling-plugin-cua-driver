@@ -57,7 +57,7 @@ if (platform === "darwin") {
     throw new Error("The macOS provider must match the release Team ID.");
   }
   execFileSync("/usr/bin/codesign", ["--verify", "--strict", "--all-architectures",
-    "-R", `anchor apple generic and certificate leaf[subject.OU] = "${team}" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists`,
+    `-R=anchor apple generic and certificate leaf[subject.OU] = "${team}" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists`,
     executable], { stdio: "inherit", timeout: 30_000 });
 } else {
   const catalog = join(runtime, "win32-x64/provider-integrity.cat");

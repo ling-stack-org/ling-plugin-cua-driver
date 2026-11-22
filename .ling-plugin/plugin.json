@@ -22,7 +22,7 @@
     {
       "id": "manifest",
       "kind": "descriptor",
-      "label": "Bundled plugin manifest"
+      "label": "Official provider manifest"
     },
     {
       "id": "binary",

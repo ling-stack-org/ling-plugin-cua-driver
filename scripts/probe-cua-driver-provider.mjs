@@ -823,31 +823,29 @@ function validateManagedReadiness(value, { childPid, hostPid, nonce }) {
   if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedKeys)) {
     throw new Error("provider readiness response keys do not match the locked contract");
   }
-  if (
-    value.schemaVersion !== 1
-    || value.childInstanceNonce !== nonce
-    || value.leaseGeneration !== 1
-    || value.readinessSequence !== 1
-    || value.hostProcessId !== hostPid
-    || !Number.isSafeInteger(childPid)
-    || childPid <= 0
-    || value.providerProcessId !== childPid
-    || !Number.isSafeInteger(value.hostSessionId)
-    || value.hostSessionId <= 0
-    || !Number.isSafeInteger(value.providerSessionId)
-    || value.providerSessionId <= 0
-    || value.providerSessionId !== value.hostSessionId
-    || value.hostIntegrityLevel !== "medium"
-    || value.providerIntegrityLevel !== "medium"
-    || value.inputDesktop !== "default_unlocked"
-    || value.jobObjectAssigned !== true
-    || value.killOnJobClose !== true
-    || value.uiaRuntime !== "available"
-    || value.d3d11 !== "available"
-    || value.wgcApi !== "supported"
-    || value.contentObserved !== false
-  ) {
-    throw new Error("provider readiness identity or lifetime invariant failed");
+  const checks = {
+    schemaVersion: value.schemaVersion === 1,
+    childInstanceNonce: value.childInstanceNonce === nonce,
+    leaseGeneration: value.leaseGeneration === 1,
+    readinessSequence: value.readinessSequence === 1,
+    hostProcessId: value.hostProcessId === hostPid,
+    providerProcessId: Number.isSafeInteger(childPid) && childPid > 0
+      && value.providerProcessId === childPid,
+    interactiveSession: Number.isSafeInteger(value.hostSessionId) && value.hostSessionId > 0
+      && value.providerSessionId === value.hostSessionId,
+    hostIntegrityLevel: value.hostIntegrityLevel === "medium",
+    providerIntegrityLevel: value.providerIntegrityLevel === "medium",
+    inputDesktop: value.inputDesktop === "default_unlocked",
+    jobObjectAssigned: value.jobObjectAssigned === true,
+    killOnJobClose: value.killOnJobClose === true,
+    uiaRuntime: value.uiaRuntime === "available",
+    d3d11: value.d3d11 === "available",
+    wgcApi: value.wgcApi === "supported",
+    contentObserved: value.contentObserved === false,
+  };
+  const failed = Object.keys(checks).filter((key) => !checks[key]);
+  if (failed.length > 0) {
+    throw new Error(`provider readiness identity or lifetime invariant failed: ${failed.join(", ")}`);
   }
   return {
     schemaVersion: 1,

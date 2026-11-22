@@ -76,7 +76,14 @@ export async function verifyToolchain(platform, lock) {
     "Microsoft.VCToolsVersion.default.txt",
   );
   const toolset = (await readFile(toolsetFile, "utf8")).trim();
-  assert(toolset === pin.msvcToolsetVersion, `MSVC toolset version mismatch: ${toolset}`);
+  if (toolset !== pin.msvcToolsetVersion) {
+    const candidateCl = join(installationPath, "VC", "Tools", "MSVC", toolset, "bin", "Hostx64", "x64", "cl.exe");
+    const compilerVersion = await runText("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-Command",
+      "(Get-Item -LiteralPath $env:LING_CUA_TOOLSET_DIAGNOSTIC_PATH).VersionInfo.ProductVersion",
+    ], { env: { ...process.env, LING_CUA_TOOLSET_DIAGNOSTIC_PATH: candidateCl } });
+    throw new Error(`MSVC toolset version mismatch: expected ${pin.msvcToolsetVersion}, directory ${toolset}, cl.exe ${compilerVersion}`);
+  }
   const sdkLib = join(programFilesX86, "Windows Kits", "10", "Lib", pin.windowsSdkVersion);
   assert((await stat(sdkLib)).isDirectory(), `Windows SDK not found: ${sdkLib}`);
   const vsDevCmd = join(installationPath, "Common7", "Tools", "VsDevCmd.bat");

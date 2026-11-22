@@ -93,6 +93,7 @@ export async function verifyToolchain(platform, lock) {
         "/c",
         `call "${vsDevCmd}" -no_logo -arch=x64 -host_arch=x64 -vcvars_ver=${vcvarsVersion} -winsdk=${pin.windowsSdkVersion} && set`,
       ],
+      { windowsVerbatimArguments: true },
     ),
   );
   const environment = mergeEnvironment(process.env, developerEnvironment, true);

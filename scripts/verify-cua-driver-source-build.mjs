@@ -257,6 +257,7 @@ function verifyObservedToolchain(platform, evidence, lock) {
   if (
     evidence.visualStudioVersion !== pin.visualStudioVersion
     || evidence.msvcToolsetVersion !== pin.msvcToolsetVersion
+    || evidence.msvcCompilerProductVersion !== pin.msvcCompilerProductVersion
     || evidence.windowsSdkVersion !== pin.windowsSdkVersion
   ) {
     fail("observed Windows toolchain does not match the lock");

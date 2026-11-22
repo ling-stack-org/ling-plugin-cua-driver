@@ -90,7 +90,8 @@
     },
     "win32X64": {
       "visualStudioVersion": "17.14.37502.11",
-      "msvcToolsetVersion": "14.44.35211",
+      "msvcToolsetVersion": "14.44.35207",
+      "msvcCompilerProductVersion": "14.44.35228.0",
       "windowsSdkVersion": "10.0.26100.0",
       "target": "x86_64-pc-windows-msvc"
     }

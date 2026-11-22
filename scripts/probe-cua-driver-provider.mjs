@@ -15,8 +15,7 @@ import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import {
   readAtomicPublishDirectoryIdentities,
-  securePrivateStagingDirectory,
-  verifyPrivateStagingDirectorySecurity,
+  secureManagedStateDirectory,
   withAtomicPublishParentLease,
 } from "./cua-driver-package-atomic-publish.mjs";
 
@@ -28,7 +27,16 @@ const HEALTH_SCHEMA_VERSION = "1";
 const PROVIDER_VERSION = "0.8.3";
 const MAX_MCP_LINE_BYTES = 4 * 1024 * 1024;
 const MAX_MCP_STDOUT_BYTES = 16 * 1024 * 1024;
+const MAX_STARTUP_STDERR_BYTES = 16 * 1024;
 const WINDOWS_FULL_CONTROL_MASK = 2_032_127;
+const STARTUP_FAILURES = [
+  [/^cua-driver: invalid Ling-managed environment: .*managed DACL/m, "managed state ACL"],
+  [/^cua-driver: invalid Ling-managed environment:/m, "managed state"],
+  [/^cua-driver: invalid Ling-managed lifetime:/m, "host lifetime"],
+  [/^cua-driver: cua_windows_lifecycle_unavailable:/m, "Windows job ownership"],
+  [/^cua-driver: managed readiness provider registration failed/m, "managed readiness registration"],
+  [/^cua-driver: invalid Ling input-fence environment:/m, "input-fence configuration"],
+];
 
 export const FROZEN_HEALTH_SKIP = Object.freeze([
   "ax_capability",
@@ -205,21 +213,14 @@ export async function prepareManagedProbeStateHome(stateHome) {
       sourceName: directoryName,
     }, lease);
     lease.assertHeld();
-    const secured = await securePrivateStagingDirectory({
+    const verified = await secureManagedStateDirectory({
       directoryName,
       expectedDirectoryIdentity: identities.sourceIdentity,
       expectedParentIdentity: identities.parentIdentity,
       parentRoot,
     }, lease);
     lease.assertHeld();
-    await verifyPrivateStagingDirectorySecurity({
-      directoryName,
-      expectedDirectoryIdentity: secured.directoryIdentity,
-      expectedParentIdentity: secured.parentIdentity,
-      parentRoot,
-    }, lease);
-    lease.assertHeld();
-    return secured;
+    return verified;
   });
 }
 
@@ -259,6 +260,7 @@ async function runProviderSession({
   const responses = new Map();
   let stdoutBuffer = "";
   let stdoutBytes = 0;
+  let startupStderr = Buffer.alloc(0);
   const stdoutDecoder = new StringDecoder("utf8");
   let stdoutDecoderFlushed = false;
   let stdinClosed = false;
@@ -304,16 +306,19 @@ async function runProviderSession({
       child.stdin.end();
     };
     child.on("error", fail);
-    child.on("exit", (code, signal) => {
-      if (!settled && !stdinClosed) {
-        fail(new Error(`provider exited before probe completed: code=${code} signal=${signal ?? "none"}`));
-      }
-    });
     child.on("close", (code, signal) => {
       if (settled) return;
       if (!stdoutDecoderFlushed) {
         stdoutBuffer += stdoutDecoder.end();
         stdoutDecoderFlushed = true;
+      }
+      if (!stdinClosed) {
+        const startupFailure = code === 78
+          ? STARTUP_FAILURES.find(([pattern]) => pattern.test(startupStderr.toString("utf8")))?.[1]
+          : undefined;
+        const detail = startupFailure ? ` stage=${startupFailure}` : "";
+        fail(new Error(`provider exited before probe completed: code=${code} signal=${signal ?? "none"}${detail}`));
+        return;
       }
       if (code !== 0 || signal !== null) {
         fail(new Error(`provider probe exited with code ${code} signal=${signal ?? "none"}`));
@@ -467,9 +472,11 @@ async function runProviderSession({
         fail(new Error(`provider MCP response exceeded ${MAX_MCP_LINE_BYTES} bytes without a delimiter`));
       }
     });
-    child.stderr.on("data", () => {
-      // Provider diagnostics are intentionally not part of the attestation;
-      // they may contain runner-specific paths and process ids.
+    child.stderr.on("data", (chunk) => {
+      // Report only known startup failure categories in CI, never raw stderr.
+      if (responses.has(1) || startupStderr.length >= MAX_STARTUP_STDERR_BYTES) return;
+      const remaining = MAX_STARTUP_STDERR_BYTES - startupStderr.length;
+      startupStderr = Buffer.concat([startupStderr, Buffer.from(chunk).subarray(0, remaining)]);
     });
     child.stdin.on("error", (error) => {
       if (error.code !== "EPIPE") fail(error);

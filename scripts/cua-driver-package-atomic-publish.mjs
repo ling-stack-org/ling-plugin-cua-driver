@@ -69,7 +69,9 @@ const NATIVE_PARENT_LEASE_OPERATIONS = new Set([
   "remove-artifact-tree",
   "remove-tree",
   "remove-unsecured-empty",
+  "secure-managed-state",
   "secure-private",
+  "verify-managed-state",
   "verify-private",
 ]);
 const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
@@ -328,6 +330,34 @@ export async function verifyPrivateStagingDirectorySecurity(input, parentLease) 
         args,
       );
   return privateDirectoryReceipt(receipt, "verified");
+}
+
+/** Apply and recheck the provider's private state policy under the parent lease. */
+export async function secureManagedStateDirectory(input, parentLease) {
+  const parentRoot = await requireCanonicalParent(input?.parentRoot);
+  const directoryName = requireLeafName(input?.directoryName);
+  const expectedParentIdentity = requireNativeIdentity(
+    input?.expectedParentIdentity,
+    "expectedParentIdentity",
+  );
+  const expectedDirectoryIdentity = requireNativeIdentity(
+    input?.expectedDirectoryIdentity,
+    "expectedDirectoryIdentity",
+  );
+  const identities = {
+    parentIdentity: expectedParentIdentity,
+    directoryIdentity: expectedDirectoryIdentity,
+  };
+  const capability = requireNativeParentLeaseCapability(parentLease, parentRoot);
+  const args = [directoryName, expectedParentIdentity, expectedDirectoryIdentity];
+  const secured = await invokeNativeParentLeaseOperation(
+    capability, "secure-managed-state", args,
+  );
+  privateDirectoryReceipt(secured, "secured", identities, true);
+  const verified = await invokeNativeParentLeaseOperation(
+    capability, "verify-managed-state", args,
+  );
+  return privateDirectoryReceipt(verified, "verified", identities, true);
 }
 
 /**
@@ -1259,7 +1289,9 @@ function assertNativeParentLeaseOperationReceipt(receipt, operation, args) {
     "remove-artifact-tree": "removed",
     "remove-tree": "removed",
     "remove-unsecured-empty": "removed",
+    "secure-managed-state": "secured",
     "secure-private": "secured",
+    "verify-managed-state": "verified",
     "verify-private": "verified",
   }[operation];
   if (receipt.outcome !== expectedOutcome) {
@@ -1289,7 +1321,7 @@ function assertNativeParentLeaseOperationReceipt(receipt, operation, args) {
     }
     return;
   }
-  if (operation === "secure-private" || operation === "verify-private") {
+  if (expectedOutcome === "secured" || expectedOutcome === "verified") {
     const expectedIdentities = args.length === 3
       ? Object.freeze({
           directoryIdentity: args[2],
@@ -1299,8 +1331,9 @@ function assertNativeParentLeaseOperationReceipt(receipt, operation, args) {
     try {
       privateDirectoryReceipt(
         receipt,
-        operation === "secure-private" ? "secured" : "verified",
+        expectedOutcome,
         expectedIdentities,
+        operation === "secure-managed-state" || operation === "verify-managed-state",
       );
     } catch (cause) {
       throw parentLeaseProtocolError(
@@ -1744,14 +1777,17 @@ function hasCompleteNativeParentLeaseReceiptContext(value) {
     || context.every((entry) => entry !== undefined);
 }
 
-function privateDirectoryReceipt(receipt, expectedOutcome, expectedIdentities) {
+function privateDirectoryReceipt(receipt, expectedOutcome, expectedIdentities, managedState = false) {
   if (receipt.outcome !== expectedOutcome) {
     throw nativeReceiptError(receipt);
   }
-  const expectedProfile = process.platform === "darwin"
-    ? "current-euid-mode-0700"
-    : "protected-dacl-current-user-system-administrators";
   const expectedInheritance = process.platform === "win32";
+  let expectedProfile = "current-euid-mode-0700";
+  if (expectedInheritance) {
+    expectedProfile = managedState
+      ? "protected-dacl-current-user"
+      : "protected-dacl-current-user-system-administrators";
+  }
   if (receipt.reason !== expectedOutcome
     || receipt.parentIdentity === undefined
     || receipt.directoryIdentity === undefined
@@ -1939,6 +1975,7 @@ function isOptionalOwnerIdentity(value) {
 function isOptionalSecurityProfile(value) {
   return value === undefined
     || value === "current-euid-mode-0700"
+    || value === "protected-dacl-current-user"
     || value === "protected-dacl-current-user-system-administrators";
 }
 

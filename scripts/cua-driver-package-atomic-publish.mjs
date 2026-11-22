@@ -334,6 +334,15 @@ export async function verifyPrivateStagingDirectorySecurity(input, parentLease) 
 
 /** Apply and recheck the provider's private state policy under the parent lease. */
 export async function secureManagedStateDirectory(input, parentLease) {
+  await managedStateDirectoryOperation(input, parentLease, "secure-managed-state", "secured");
+  return verifyManagedStateDirectorySecurity(input, parentLease);
+}
+
+export async function verifyManagedStateDirectorySecurity(input, parentLease) {
+  return managedStateDirectoryOperation(input, parentLease, "verify-managed-state", "verified");
+}
+
+async function managedStateDirectoryOperation(input, parentLease, operation, outcome) {
   const parentRoot = await requireCanonicalParent(input?.parentRoot);
   const directoryName = requireLeafName(input?.directoryName);
   const expectedParentIdentity = requireNativeIdentity(
@@ -350,14 +359,8 @@ export async function secureManagedStateDirectory(input, parentLease) {
   };
   const capability = requireNativeParentLeaseCapability(parentLease, parentRoot);
   const args = [directoryName, expectedParentIdentity, expectedDirectoryIdentity];
-  const secured = await invokeNativeParentLeaseOperation(
-    capability, "secure-managed-state", args,
-  );
-  privateDirectoryReceipt(secured, "secured", identities, true);
-  const verified = await invokeNativeParentLeaseOperation(
-    capability, "verify-managed-state", args,
-  );
-  return privateDirectoryReceipt(verified, "verified", identities, true);
+  const receipt = await invokeNativeParentLeaseOperation(capability, operation, args);
+  return privateDirectoryReceipt(receipt, outcome, identities, true);
 }
 
 /**

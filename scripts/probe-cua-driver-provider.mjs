@@ -17,6 +17,7 @@ import {
   readAtomicPublishDirectoryIdentities,
   runOwnedWindowsProcess,
   secureManagedStateDirectory,
+  verifyManagedStateDirectorySecurity,
   withAtomicPublishParentLease,
 } from "./cua-driver-package-atomic-publish.mjs";
 
@@ -52,13 +53,15 @@ export const FROZEN_DENIED_TOOLS = Object.freeze(["check_for_update"]);
 /** Launch the release probe on Windows with a Desktop-equivalent user token. */
 export async function probeCuaDriverRelease(input) {
   if (input.platform !== "win32-x64") return probeCuaDriverProvider(input);
+  const { parentIdentity, directoryIdentity } = await prepareManagedProbeStateHome(input.stateHome);
+  const preparedState = { parentIdentity, directoryIdentity };
   const program = `
     import { probeCuaDriverProvider } from ${JSON.stringify(import.meta.url)};
     const probe = await probeCuaDriverProvider(JSON.parse(process.argv[1]));
     process.stdout.write(JSON.stringify(probe));
   `;
   const { stdout } = await runOwnedWindowsProcess(process.execPath, [
-    "--input-type=module", "--eval", program, JSON.stringify(input),
+    "--input-type=module", "--eval", program, JSON.stringify({ ...input, preparedState }),
   ], { standardUser: true, encoding: "utf8", timeout: 180_000, maxBuffer: 1024 * 1024 });
   return JSON.parse(stdout);
 }
@@ -82,6 +85,7 @@ export async function probeCuaDriverProvider({
   spawnProcess = spawn,
   performStateAcceptance = true,
   inspectWindowsAcl = inspectManagedWindowsAcl,
+  preparedState,
 }) {
   if (!binaryPath || !stateHome) throw new TypeError("binaryPath and stateHome are required");
   if (platform !== "darwin" && platform !== "win32-x64") {
@@ -108,7 +112,17 @@ export async function probeCuaDriverProvider({
   const externalHome = `${stateHome}-external-home`;
   const rootLink = `${stateHome}-root-link`;
   const rootLinkTarget = `${stateHome}-root-link-target`;
-  await prepareManagedProbeStateHome(stateHome);
+  if (preparedState) {
+    const parentRoot = dirname(stateHome);
+    await withAtomicPublishParentLease({ parentRoot }, (lease) => verifyManagedStateDirectorySecurity({
+      directoryName: basename(stateHome),
+      expectedDirectoryIdentity: preparedState.directoryIdentity,
+      expectedParentIdentity: preparedState.parentIdentity,
+      parentRoot,
+    }, lease));
+  } else {
+    await prepareManagedProbeStateHome(stateHome);
+  }
   await mkdir(join(externalHome, ".cua-driver"), { recursive: true });
   await mkdir(join(externalHome, ".cua-driver-rs"), { recursive: true });
   await writeFile(join(externalHome, ".cua-driver", "sentinel.bin"), "external-cua-driver-state");

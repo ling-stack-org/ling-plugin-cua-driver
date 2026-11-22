@@ -401,10 +401,10 @@ index 6aabae5..25c9745 100644
      }
 diff --git a/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
 new file mode 100644
-index 0000000..23dbafa
+index 0000000..aa78ccf
 --- /dev/null
 +++ b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
-@@ -0,0 +1,505 @@
+@@ -0,0 +1,534 @@
 +#![cfg(debug_assertions)]
 +
 +use serde_json::{json, Value};
@@ -419,6 +419,8 @@ index 0000000..23dbafa
 +use wait_timeout::ChildExt;
 +
 +const PROVIDER: &str = env!("CARGO_BIN_EXE_cua-driver");
++const CHILD_NONCE: &str = "native-acceptance-child";
++const LEASE_GENERATION: u64 = 1;
 +static DIAGNOSE_LOCK: Mutex<()> = Mutex::new(());
 +
 +struct ManagedFixture {
@@ -549,6 +551,29 @@ index 0000000..23dbafa
 +        response
 +    }
 +
++    #[cfg(target_os = "windows")]
++    fn establish_readiness(&mut self) {
++        let ready = self.request(
++            4,
++            "ling/managed_readiness",
++            json!({
++                "schemaVersion": 1,
++                "childInstanceNonce": CHILD_NONCE,
++                "leaseGeneration": LEASE_GENERATION
++            }),
++        );
++        assert_eq!(
++            ready.pointer("/result/providerProcessId"),
++            Some(&json!(self.child.id())),
++            "managed readiness failed: {ready}"
++        );
++        assert_eq!(
++            ready.pointer("/result/hostProcessId"),
++            Some(&json!(std::process::id())),
++            "managed readiness failed: {ready}"
++        );
++    }
++
 +    fn close_stdin_and_wait(&mut self) -> std::process::ExitStatus {
 +        drop(self.stdin.take());
 +        wait_for_exit(&mut self.child, Duration::from_secs(10))
@@ -573,6 +598,8 @@ index 0000000..23dbafa
 +        initialize.pointer("/result/protocolVersion"),
 +        Some(&json!("2025-06-18"))
 +    );
++    #[cfg(target_os = "windows")]
++    first.establish_readiness();
 +    let updated = first.request(
 +        2,
 +        "tools/call",
@@ -602,6 +629,8 @@ index 0000000..23dbafa
 +
 +    let mut second = McpProcess::spawn(&fixture, std::process::id(), &[]);
 +    second.initialize();
++    #[cfg(target_os = "windows")]
++    second.establish_readiness();
 +    let config = second.request(
 +        2,
 +        "tools/call",
@@ -838,8 +867,8 @@ index 0000000..23dbafa
 +        .env("CUA_DRIVER_EMBEDDED", "1")
 +        .env("CUA_DRIVER_HOST_BUNDLE_ID", "com.lingstack.desktop")
 +        .env("CUA_DRIVER_HOST_PID", host_pid.to_string())
-+        .env("CUA_DRIVER_CHILD_INSTANCE_NONCE", "native-acceptance-child")
-+        .env("CUA_DRIVER_LEASE_GENERATION", "1")
++        .env("CUA_DRIVER_CHILD_INSTANCE_NONCE", CHILD_NONCE)
++        .env("CUA_DRIVER_LEASE_GENERATION", LEASE_GENERATION.to_string())
 +        .env("CUA_DRIVER_STATE_HOME", &fixture.root)
 +        .env("CUA_DRIVER_TELEMETRY_HOME", fixture.root.join("telemetry"))
 +        .env("CUA_DRIVER_RS_TELEMETRY_ENABLED", "false")

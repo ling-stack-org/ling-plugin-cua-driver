@@ -53,23 +53,21 @@ export async function verifyToolchain(platform, lock) {
   const programFilesX86 = process.env["ProgramFiles(x86)"];
   assert(programFilesX86, "ProgramFiles(x86) is not set");
   const vswhere = join(programFilesX86, "Microsoft Visual Studio", "Installer", "vswhere.exe");
-  const installationPath = await runText(vswhere, [
-    "-latest",
+  const installations = JSON.parse(await runText(vswhere, [
     "-products",
     "*",
     "-requires",
     "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-    "-property",
-    "installationPath",
-  ]);
-  assert(installationPath.length > 0, "Visual Studio installation was not found");
-  const catalog = JSON.parse(
-    await runText(vswhere, ["-path", installationPath, "-format", "json", "-utf8"]),
-  )[0]?.catalog;
+    "-format",
+    "json",
+    "-utf8",
+  ]));
+  const installation = installations.find((item) => item.installationVersion === pin.visualStudioVersion);
   assert(
-    catalog?.productDisplayVersion === pin.visualStudioVersion,
-    `Visual Studio version mismatch: ${catalog?.productDisplayVersion ?? "missing"}`,
+    installation && typeof installation.installationPath === "string" && installation.installationPath.length > 0,
+    `Visual Studio build ${pin.visualStudioVersion} not found: ${installations.map((item) => item.installationVersion).join(", ") || "missing"}`,
   );
+  const installationPath = installation.installationPath;
   const toolsetFile = join(
     installationPath,
     "VC",

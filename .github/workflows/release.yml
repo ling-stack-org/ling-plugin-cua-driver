@@ -1,0 +1,43 @@
+name: Cua Driver plugin release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  verify-inputs:
+    strategy:
+      matrix:
+        include:
+          - platform: darwin
+            arch: arm64
+          - platform: win32-x64
+            arch: x64
+    runs-on: ${{ matrix.platform == 'darwin' && 'macos-14' || 'windows-2025' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.1
+          cache: pnpm
+      - run: corepack pnpm install --frozen-lockfile
+      - name: Verify provider inputs and promotion eligibility
+        run: node scripts/build-cua-driver-provider.mjs --verify-only --platform ${{ matrix.platform }} --output-dir .codex-artifacts/provider-verify
+      - name: Stop before packaging until the reviewed provider lock enables this platform
+        run: |
+          test "$(node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync("provider/provider-lock.json","utf8")); process.stdout.write(String(v.enabledPlatforms.includes(process.argv[1])))' "${{ matrix.platform }}")" = true

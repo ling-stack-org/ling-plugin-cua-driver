@@ -24,7 +24,8 @@ than being rewritten solely to erase unrelated baseline formatting drift.
 
 ## Reproduce the candidate
 
-Run in the separately governed private native release environment for the target platform:
+Use the Provider native build workflow or a native host with the exact locked toolchain.
+Use a protected release environment for production signing. [Provider releases](../../docs/RELEASE.md)
 
 ```bash
 node scripts/build-cua-driver-provider.mjs \

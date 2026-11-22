@@ -29,10 +29,10 @@ index 21ffab2..7a78c4a 100644
  pub mod policy;
 diff --git a/libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed.rs b/libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed.rs
 new file mode 100644
-index 0000000..dde0f0d
+index 0000000..f33547c
 --- /dev/null
 +++ b/libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed.rs
-@@ -0,0 +1,1405 @@
+@@ -0,0 +1,1404 @@
 +//! Ling-owned managed-embedding environment and capability-root state access.
 +//!
 +//! Managed mode intentionally keeps the user's real HOME/USERPROFILE intact.
@@ -1425,13 +1425,12 @@ index 0000000..dde0f0d
 +        std::fs::create_dir(&outside).unwrap();
 +        let junction = good.join("version-check");
 +        std::fs::remove_dir(&junction).unwrap();
-+        let command = format!(
-+            "mklink /J \"{}\" \"{}\"",
-+            junction.display(),
-+            outside.display()
-+        );
++        // mklink resolves the relative fixture paths on the local volume.
 +        let status = std::process::Command::new("cmd.exe")
-+            .args(["/d", "/s", "/c", &command])
++            .current_dir(temporary.path())
++            .args(["/d", "/c", "mklink", "/J"])
++            .arg(junction.strip_prefix(&base).unwrap())
++            .arg(outside.strip_prefix(&base).unwrap())
 +            .status()
 +            .unwrap();
 +        assert!(status.success(), "failed to create junction fixture");

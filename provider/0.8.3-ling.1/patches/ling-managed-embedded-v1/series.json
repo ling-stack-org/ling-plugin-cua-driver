@@ -4,7 +4,7 @@
   "implementationStatus": "runtime_integrated",
   "upstreamCommit": "0612c26b2c7b8556f6de7f6b4f3927ecac914e4f",
   "seriesDigestAlgorithm": "sha256(id:patchSha256 followed by LF, in manifest order)",
-  "seriesSha256": "edb89636dab1f7d2b9db85bcfa88d2979f8c25f5d14bb2af83033a3ca9f1822c",
+  "seriesSha256": "3bb52ee3c00ae9ad506443a8025b88801ced43568dc3ce3a0b3c0e2653abad68",
   "patches": [
     {
       "id": "ling-embedded-state-home-v1",
@@ -19,7 +19,7 @@
     {
       "id": "ling-managed-lifetime-v1",
       "file": "0003-ling-managed-lifetime-v1.patch",
-      "sha256": "dc85b2089da4a943521dbb1a8f866274a02ee839714c3d491e0f841efa3094a5"
+      "sha256": "bfe31cefb554339b5c7b94f79e8e91f5707ea83a5d4873472eb514aa515e84c0"
     },
     {
       "id": "ling-windows-capability-errors-v1",

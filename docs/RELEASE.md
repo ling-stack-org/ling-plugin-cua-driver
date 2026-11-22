@@ -2,8 +2,8 @@
 
 Build the provider for macOS arm64 or Windows x64 with the native toolchain in the pinned [source inputs](../provider/0.8.3-ling.1/source-build-inputs.json). The [reproducibility runbook](../provider/0.8.3-ling.1/README.md) covers independent A/B runs and promotion.
 
-The committed [provider lock](../provider/0.8.3-ling.1/provider-lock.json) authorizes the reviewed Darwin source build. Windows requires a reviewed promotion of its platform record. Both platforms require separately verified final platform signatures and runtime evidence for distribution.
+The committed [provider lock](../provider/0.8.3-ling.1/provider-lock.json) authorizes the recorded Darwin source build by its exact input and artifact digests. Changes to source inputs, including the managed MCP integration test, require fresh A/B evidence and review before promotion. Windows requires an initial promotion of its platform record. Both platforms require verified final platform signatures and installed runtime evidence for distribution.
 
-The Provider native build workflow checks the locked inputs, runs two independent builds and compares their output. Run it on an environment that matches the pinned native toolchain. The downloadable workflow outputs are pre-sign candidates.
+The Provider native build workflow checks the locked inputs, runs two independent builds and compares their output. The selected runner must expose the exact Xcode or Visual Studio, Rust and SDK versions from the source inputs. The downloadable workflow outputs are pre-sign candidates.
 
 A reviewed, signed runtime tree preserves the Ling resource layout under `runtime/providers/cua-driver/<distribution-revision>/`. Include the lock, license and notices, the native binary, the provider seal, and the Windows integrity catalog when applicable. Publish the platform archive with its provenance and submit its immutable release URL to the [official catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).

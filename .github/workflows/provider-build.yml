@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         replica: [a, b]
-    runs-on: ${{ inputs.platform == 'darwin' && 'macos-26' || 'windows-2025' }}
+    runs-on: ${{ inputs.platform == 'darwin' && 'macos-26' || 'windows-2022' }}
     timeout-minutes: 90
     defaults:
       run:
@@ -48,7 +48,7 @@ jobs:
           if-no-files-found: error
   compare:
     needs: build
-    runs-on: ${{ inputs.platform == 'darwin' && 'macos-26' || 'windows-2025' }}
+    runs-on: ${{ inputs.platform == 'darwin' && 'macos-26' || 'windows-2022' }}
     defaults:
       run:
         shell: bash

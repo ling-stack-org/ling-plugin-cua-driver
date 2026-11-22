@@ -761,3 +761,22 @@ index 404b6c4..fba9b28 100644
  // ── get_accessibility_tree ────────────────────────────────────────────────────
  
  pub struct GetAccessibilityTreeTool;
+diff --git a/libs/cua-driver/rust/crates/cua-driver/tests/protocol_media_test.rs b/libs/cua-driver/rust/crates/cua-driver/tests/protocol_media_test.rs
+index ec8cc34..19a946f 100644
+--- a/libs/cua-driver/rust/crates/cua-driver/tests/protocol_media_test.rs
++++ b/libs/cua-driver/rust/crates/cua-driver/tests/protocol_media_test.rs
+@@ -168,12 +168,13 @@
+         let Some(wid) = win["window_id"].as_u64() else {
+             continue;
+         };
++        let pid = win["pid"].as_i64().expect("listed window has an owning PID");
+         tried += 1;
+
+         d.send(&serde_json::json!({
+             "jsonrpc":"2.0","id": 2 + tried as u64,"method":"tools/call",
+             "params":{"name":"zoom","arguments":{
+-                "window_id": wid,
++                "window_id": wid, "pid": pid,
+                 "x1": 0, "y1": 0, "x2": 100, "y2": 100
+             }}
+         }));

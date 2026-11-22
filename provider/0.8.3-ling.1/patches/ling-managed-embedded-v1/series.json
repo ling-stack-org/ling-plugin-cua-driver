@@ -4,7 +4,7 @@
   "implementationStatus": "runtime_integrated",
   "upstreamCommit": "0612c26b2c7b8556f6de7f6b4f3927ecac914e4f",
   "seriesDigestAlgorithm": "sha256(id:patchSha256 followed by LF, in manifest order)",
-  "seriesSha256": "c6b9fd1133f98ddecc7dbfda0baff4a79d965d024e457e8ca81a9586a1a342da",
+  "seriesSha256": "f4c987a16e4e588368e77eed50a87c2bf0050632a4c5e72fac3bbe22f5c303ed",
   "patches": [
     {
       "id": "ling-embedded-state-home-v1",
@@ -24,7 +24,7 @@
     {
       "id": "ling-windows-capability-errors-v1",
       "file": "0004-ling-windows-capability-errors-v1.patch",
-      "sha256": "2184241e1612f411f6d4db7a9edcf451fe8d85298c0130de2c71cc4cabc945e8"
+      "sha256": "bcffdd976ee34f4c82130e03c87677605d9c44f680423dd7f1d6ece2f76475e3"
     },
     {
       "id": "ling-provider-input-fence-v1",
@@ -57,6 +57,7 @@
     "libs/cua-driver/rust/crates/cua-driver/src/telemetry.rs",
     "libs/cua-driver/rust/crates/cua-driver/src/version_check.rs",
     "libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs",
+    "libs/cua-driver/rust/crates/cua-driver/tests/protocol_media_test.rs",
     "libs/cua-driver/rust/crates/pip-preview/src/lib.rs",
     "libs/cua-driver/rust/crates/platform-macos/src/tools/mod.rs",
     "libs/cua-driver/rust/crates/platform-macos/src/tools/set_config.rs",

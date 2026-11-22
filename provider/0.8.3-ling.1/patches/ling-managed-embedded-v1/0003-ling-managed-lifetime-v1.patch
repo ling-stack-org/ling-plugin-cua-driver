@@ -401,10 +401,10 @@ index 6aabae5..25c9745 100644
      }
 diff --git a/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
 new file mode 100644
-index 0000000..40435b2
+index 0000000..23dbafa
 --- /dev/null
 +++ b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
-@@ -0,0 +1,487 @@
+@@ -0,0 +1,505 @@
 +#![cfg(debug_assertions)]
 +
 +use serde_json::{json, Value};
@@ -585,7 +585,11 @@ index 0000000..40435b2
 +            }
 +        }),
 +    );
-+    assert_ne!(updated.pointer("/result/isError"), Some(&Value::Bool(true)));
++    assert_ne!(
++        updated.pointer("/result/isError"),
++        Some(&Value::Bool(true)),
++        "managed set_config failed: {updated}"
++    );
 +    assert!(first.close_stdin_and_wait().success());
 +
 +    assert_eq!(snapshot_tree(&fixture.home), external_before);
@@ -718,7 +722,7 @@ index 0000000..40435b2
 +    command
 +        .stdin(Stdio::piped())
 +        .stdout(Stdio::piped())
-+        .stderr(Stdio::null());
++        .stderr(Stdio::piped());
 +    let mut child = command.spawn().expect("spawn half-close provider");
 +    let mut stdin = child.stdin.take().unwrap();
 +    drop(child.stdout.take());
@@ -739,7 +743,21 @@ index 0000000..40435b2
 +    .unwrap();
 +    stdin.flush().unwrap();
 +    let status = wait_for_exit(&mut child, Duration::from_secs(10));
-+    assert!(status.success(), "half-close exit was {status:?}");
++    let output = child.wait_with_output().expect("collect half-close stderr");
++    let stderr = String::from_utf8_lossy(&output.stderr);
++
++    #[cfg(not(target_os = "windows"))]
++    assert!(status.success(), "half-close exit was {status:?}: {stderr}");
++    #[cfg(target_os = "windows")]
++    {
++        // The Windows CLI reports a failed stdout write as a transport error.
++        assert_eq!(status.code(), Some(1), "half-close exit: {stderr}");
++        assert!(
++            stderr.contains("MCP server error:")
++                && (stderr.contains("(os error 109)") || stderr.contains("(os error 232)")),
++            "expected a closed stdout pipe: {stderr}"
++        );
++    }
 +}
 +
 +#[cfg(target_os = "windows")]

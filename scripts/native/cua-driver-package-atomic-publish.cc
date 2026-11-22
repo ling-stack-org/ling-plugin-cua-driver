@@ -3646,6 +3646,75 @@ int OwnedProcessFailure(const wchar_t* phase, DWORD error_code) {
   return kExitNotCommitted;
 }
 
+// Use the current account and logon session for the release probe. Restrict
+// elevated runners to the integrity level of the Desktop process being tested.
+bool PrepareStandardUserToken(ScopedHandle* restricted, DWORD* error_code) {
+  HANDLE raw_token = INVALID_HANDLE_VALUE;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE |
+                            TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
+                        &raw_token)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  ScopedHandle token(raw_token);
+  DWORD token_size = 0;
+  if (GetTokenInformation(token.get(), TokenIntegrityLevel, nullptr, 0,
+                          &token_size) ||
+      GetLastError() != ERROR_INSUFFICIENT_BUFFER || token_size == 0) {
+    *error_code = GetLastError();
+    return false;
+  }
+  std::vector<std::byte> integrity(token_size);
+  if (!GetTokenInformation(token.get(), TokenIntegrityLevel, integrity.data(),
+                           token_size, &token_size)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  const auto* label =
+      reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(integrity.data());
+  PSID sid = label->Label.Sid;
+  if (!IsValidSid(sid) || *GetSidSubAuthorityCount(sid) == 0) {
+    *error_code = ERROR_INVALID_SID;
+    return false;
+  }
+  const DWORD sub_authorities = *GetSidSubAuthorityCount(sid);
+  const DWORD rid = *GetSidSubAuthority(sid, sub_authorities - 1);
+  if (rid == SECURITY_MANDATORY_MEDIUM_RID ||
+      rid == SECURITY_MANDATORY_MEDIUM_PLUS_RID) {
+    return true;
+  }
+  if (rid < SECURITY_MANDATORY_MEDIUM_RID) {
+    *error_code = ERROR_ACCESS_DENIED;
+    return false;
+  }
+
+  HANDLE raw_restricted = INVALID_HANDLE_VALUE;
+  if (!CreateRestrictedToken(token.get(), DISABLE_MAX_PRIVILEGE | LUA_TOKEN,
+                             0, nullptr, 0, nullptr, 0, nullptr,
+                             &raw_restricted)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  restricted->reset(raw_restricted);
+  std::vector<BYTE> sid_buffer;
+  PSID medium_sid = nullptr;
+  if (!CreatePinnedWellKnownSid(WinMediumLabelSid, &sid_buffer, &medium_sid,
+                                error_code)) {
+    return false;
+  }
+  TOKEN_MANDATORY_LABEL medium {};
+  medium.Label.Sid = medium_sid;
+  medium.Label.Attributes = SE_GROUP_INTEGRITY;
+  const DWORD label_size =
+      static_cast<DWORD>(sizeof(medium)) + GetLengthSid(medium_sid);
+  if (!SetTokenInformation(restricted->get(), TokenIntegrityLevel, &medium,
+                           label_size)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  return true;
+}
+
 int RunOwnedWindowsProcess(int argc, wchar_t* argv[]) {
   if (argc < 3 || !IsAbsoluteWindowsCommand(argv[2])) {
     return OwnedProcessFailure(L"input", ERROR_INVALID_PARAMETER);
@@ -3723,11 +3792,25 @@ int RunOwnedWindowsProcess(int argc, wchar_t* argv[]) {
   startup.StartupInfo.hStdOutput = standard_output.get();
   startup.StartupInfo.hStdError = standard_error_handle.get();
   startup.lpAttributeList = attributes.get();
+  ScopedHandle restricted;
+  if (std::wstring(argv[1]) == L"run-owned-standard-user") {
+    DWORD token_error = ERROR_SUCCESS;
+    if (!PrepareStandardUserToken(&restricted, &token_error)) {
+      return OwnedProcessFailure(L"standard-user-token", token_error);
+    }
+  }
   PROCESS_INFORMATION process_info {};
-  if (!CreateProcessW(
-          command.c_str(), command_line.data(), nullptr, nullptr, TRUE,
-          CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
-          nullptr, nullptr, &startup.StartupInfo, &process_info)) {
+  constexpr DWORD creation_flags =
+      CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT;
+  const BOOL created = restricted.valid()
+      ? CreateProcessAsUserW(restricted.get(), command.c_str(),
+                             command_line.data(), nullptr, nullptr, TRUE,
+                             creation_flags, nullptr, nullptr,
+                             &startup.StartupInfo, &process_info)
+      : CreateProcessW(command.c_str(), command_line.data(), nullptr, nullptr,
+                       TRUE, creation_flags, nullptr, nullptr,
+                       &startup.StartupInfo, &process_info);
+  if (!created) {
     return OwnedProcessFailure(L"create-process", GetLastError());
   }
   ScopedHandle process(process_info.hProcess);
@@ -4348,7 +4431,8 @@ int wmain(int argc, wchar_t* argv[]) {
     }
     return HoldParentLockOnWindows(argv[2], timeout_ms);
   }
-  if (argc >= 3 && std::wstring(argv[1]) == L"run-owned") {
+  if (argc >= 3 && (std::wstring(argv[1]) == L"run-owned" ||
+                    std::wstring(argv[1]) == L"run-owned-standard-user")) {
     return RunOwnedWindowsProcess(argc, argv);
   }
   if (argc == 4 && std::wstring(argv[1]) == L"inspect") {

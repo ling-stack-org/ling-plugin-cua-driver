@@ -532,6 +532,7 @@ export async function runOwnedWindowsProcess(command, args, options = {}) {
     "env",
     "maxBuffer",
     "signal",
+    "standardUser",
     "timeout",
     "windowsHide",
   ]);
@@ -542,14 +543,20 @@ export async function runOwnedWindowsProcess(command, args, options = {}) {
       `unsupported owned process option: ${unexpected}`,
     );
   }
-  const execOptions = { ...options };
+  const { standardUser, ...execOptions } = options;
+  if (standardUser !== undefined && typeof standardUser !== "boolean") {
+    throw new CuaDriverAtomicPublishError(
+      "staging_owned_process_options_invalid",
+      "standardUser must be a boolean",
+    );
+  }
   delete execOptions.windowsHide;
   const nativePublisher = await getNativePublisher();
   await assertNativePublisherIdentity(nativePublisher);
   try {
     return await execFile(
       nativePublisher.path,
-      ["run-owned", command, ...args],
+      [standardUser ? "run-owned-standard-user" : "run-owned", command, ...args],
       {
         ...execOptions,
         windowsHide: true,

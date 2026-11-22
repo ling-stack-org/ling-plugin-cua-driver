@@ -22,7 +22,8 @@ import {
 } from "./cua-driver-binary-identity.mjs";
 import { acquireReferenceArtifact } from "./cua-driver-reference-artifacts.mjs";
 import { verifyToolchain } from "./cua-driver-source-build-toolchain.mjs";
-import { probeCuaDriverProvider, sha256Text } from "./probe-cua-driver-provider.mjs";
+import { probeCuaDriverRelease, sha256Text } from "./probe-cua-driver-provider.mjs";
+import { runOwnedWindowsProcess } from "./cua-driver-package-atomic-publish.mjs";
 import { normalizeCuaDriverSwiftArchives } from "./cua-driver-swift-archive-normalizer.mjs";
 import {
   inspectCuaDriverMachOIdentity,
@@ -76,6 +77,17 @@ const toolchain = await verifyToolchain(platform, lock);
 // Cargo and the native publisher used by the runtime probe share this CLI's
 // verified developer environment.
 Object.assign(process.env, toolchain.env);
+if (platform === "win32-x64") {
+  const systemRoot = process.env.SystemRoot ?? process.env.windir;
+  if (!systemRoot) throw new Error("Windows SystemRoot is required for the release probe.");
+  const { stdout } = await runOwnedWindowsProcess(
+    join(systemRoot, "System32", "whoami.exe"), ["/groups", "/fo", "csv", "/nh"],
+    { standardUser: true, encoding: "utf8", timeout: 15_000, maxBuffer: 64 * 1024 },
+  );
+  if (!/"S-1-16-(?:8192|8448)"/u.test(stdout)) {
+    throw new Error("The Windows release probe requires a Medium integrity process.");
+  }
+}
 const { referenceRoot: _referenceRoot, ...referenceArtifact } = await acquireReferenceArtifact({
   platform,
   lock,
@@ -340,7 +352,7 @@ const builtBinaryIdentity = await inspectBuiltBinaryIdentity({
   outputRoot,
   platform,
 });
-const probe = await probeCuaDriverProvider({
+const probe = await probeCuaDriverRelease({
   binaryPath: mainBinaryPath,
   platform,
   stateHome: join(workRoot, "probe-state"),

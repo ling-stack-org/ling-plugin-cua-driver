@@ -10,4 +10,6 @@ The Windows native test opens the managed MCP session for each child with `initi
 
 The release runtime probe verifies its managed state directory under the native parent lease before launching the provider. On Windows the owner is the current user and the protected DACL grants FullControl only to that user. On macOS the directory is owned by the effective user with mode `0700`. The probe also verifies configuration persistence across two launches and rejects linked state paths.
 
+The Windows build validates that the owned probe can run at Medium integrity before compiling the provider. On an elevated build runner the native launcher restricts the probe to the same account and interactive session at Medium integrity. The probe checks the actual integrity of both the host and provider.
+
 A reviewed, signed runtime tree preserves the Ling resource layout under `runtime/providers/cua-driver/<distribution-revision>/`. Include the lock, license and notices, the native binary, the provider seal, and the Windows integrity catalog when applicable. Publish the platform archive with its provenance and submit its immutable release URL to the [official catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).

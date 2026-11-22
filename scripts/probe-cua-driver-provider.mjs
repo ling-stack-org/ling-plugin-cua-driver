@@ -15,6 +15,7 @@ import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import {
   readAtomicPublishDirectoryIdentities,
+  runOwnedWindowsProcess,
   secureManagedStateDirectory,
   withAtomicPublishParentLease,
 } from "./cua-driver-package-atomic-publish.mjs";
@@ -47,6 +48,20 @@ export const FROZEN_HEALTH_SKIP = Object.freeze([
 ]);
 
 export const FROZEN_DENIED_TOOLS = Object.freeze(["check_for_update"]);
+
+/** Launch the release probe on Windows with a Desktop-equivalent user token. */
+export async function probeCuaDriverRelease(input) {
+  if (input.platform !== "win32-x64") return probeCuaDriverProvider(input);
+  const program = `
+    import { probeCuaDriverProvider } from ${JSON.stringify(import.meta.url)};
+    const probe = await probeCuaDriverProvider(JSON.parse(process.argv[1]));
+    process.stdout.write(JSON.stringify(probe));
+  `;
+  const { stdout } = await runOwnedWindowsProcess(process.execPath, [
+    "--input-type=module", "--eval", program, JSON.stringify(input),
+  ], { standardUser: true, encoding: "utf8", timeout: 180_000, maxBuffer: 1024 * 1024 });
+  return JSON.parse(stdout);
+}
 
 /**
  * Run the built provider through its real embedded stdio MCP boundary and

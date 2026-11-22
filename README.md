@@ -1,9 +1,9 @@
-# Ling Cua Driver Plugin
+# Ling Cua Driver
 
-This repository owns Ling's reviewed Cua Driver provider source-build inputs, patch series, reproducibility evidence and platform artifacts. Ling Desktop remains the authority for process lifetime, interactive-session checks, leases, approvals and audit.
+This repository owns the provider source-build inputs, Ling patch series, and native build and reproducibility workflow. Ling Desktop owns process lifetime, interactive-session checks, approval policy and the integration with operating-system permissions.
 
-The provider is never accepted from an arbitrary URL or an unsigned binary. Each release binds the upstream commit, patch set, toolchain, provider lock, platform artifact digest, license and third-party notices. The existing A/B build and promotion gates remain required.
+- [Source and A/B build instructions](provider/0.8.3-ling.1/README.md)
+- [Platform release requirements](docs/RELEASE.md)
+- [Desktop host and provider contracts](docs/cua-driver-bundled-embedded.md)
 
-The package workflow is intentionally blocked until the committed provider lock enables the target platform and the required native signing evidence is present.
-
-See the documents under [docs](docs/) for the embedded-provider contract and guided installation flow.
+Run `node --test test/*.test.mjs` to validate the source-build and promotion contracts.

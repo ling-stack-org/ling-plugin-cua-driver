@@ -135,7 +135,7 @@ packaged runtime still uses the external provider path. This does not complete
 The paired product and architecture decision is
 [Bundled Embedded Cua Driver](cua-driver-bundled-embedded.md).
 The staged delivery plan is
-[Bundled Embedded Cua Driver Implementation Plan](cua-driver-bundled-embedded-implementation-plan.md).
+[Bundled Embedded Cua Driver Implementation Plan](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/cua-driver-bundled-embedded-implementation-plan.md).
 
 ## Design Goals
 
@@ -158,7 +158,7 @@ The staged delivery plan is
   the two generic management surfaces.
 - Keep locked-computer control unavailable and make page/window/PiP close semantics
   independent from activation. The fixed task-continues/control-pauses boundary is specified
-  in [Lock-Aware Task Continuation Detailed Design](locked-computer-control-detailed-design.md).
+  in [Lock-Aware Task Continuation Detailed Design](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/locked-computer-control-detailed-design.md).
 - Produce a deterministic Windows acceptance handoff even though Windows colleagues own
   real-machine execution and sign-off.
 
@@ -2593,7 +2593,7 @@ page.
 4. **Lock behavior**: three informational rows state that tasks continue, Computer Control
    pauses and a fresh readiness cycle restores control after unlock. The component has no
    Switch, persisted preference or mutation handler; see
-   [Lock-Aware Task Continuation Detailed Design](locked-computer-control-detailed-design.md).
+   [Lock-Aware Task Continuation Detailed Design](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/locked-computer-control-detailed-design.md).
 5. **Advanced details**: version, Ling distribution revision, platform, integrity, last
    check and limitations. "Last checked" comes only from `plugin.health.checkedAt`; the
    setup `checkedAt` is Catalog projection time and must never be shown as a verification
@@ -3168,7 +3168,7 @@ No product or architecture choice remains open for the standard-capability inter
   and MCP Settings hide only their bundled presentation while retaining internal records;
 - privacy: locked-computer control is unavailable; tasks continue while native control
   pauses and recovers according to
-  [Lock-Aware Task Continuation](locked-computer-control-policy.md), while general
+  [Lock-Aware Task Continuation](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/locked-computer-control-policy.md), while general
   per-application policy remains deferred;
 - Windows: bundled x64 main provider in standard Medium-IL mode; real-machine acceptance
   is owned by the Windows team.

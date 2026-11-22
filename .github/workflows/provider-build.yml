@@ -1,0 +1,67 @@
+name: Provider native build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        description: Target with the locked native toolchain
+        required: true
+        options: [darwin, win32-x64]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        replica: [a, b]
+    runs-on: ${{ inputs.platform == 'darwin' && 'macos-26' || 'windows-2025' }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      PROVIDER_TARGET: ${{ inputs.platform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22.22.1
+      - name: Build and verify the locked source
+        run: |
+          node scripts/build-cua-driver-provider.mjs --platform "$PROVIDER_TARGET" --work-dir "$RUNNER_TEMP/cua-build" --output-dir "$GITHUB_WORKSPACE/provider-output"
+          node scripts/verify-cua-driver-source-build.mjs --expected-platform "$PROVIDER_TARGET" --attestation "$GITHUB_WORKSPACE/provider-output/source-build-attestation.json" --output-root "$GITHUB_WORKSPACE/provider-output"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: source-build-${{ inputs.platform }}-${{ matrix.replica }}
+          path: provider-output/
+          if-no-files-found: error
+  compare:
+    needs: build
+    runs-on: ${{ inputs.platform == 'darwin' && 'macos-26' || 'windows-2025' }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PROVIDER_TARGET: ${{ inputs.platform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22.22.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          path: candidates
+          pattern: source-build-*
+      - name: Compare independent builds
+        run: |
+          node scripts/verify-cua-driver-source-build.mjs --compare-a "$GITHUB_WORKSPACE/candidates/source-build-$PROVIDER_TARGET-a" --compare-b "$GITHUB_WORKSPACE/candidates/source-build-$PROVIDER_TARGET-b"

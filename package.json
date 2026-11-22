@@ -5,9 +5,10 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "verify:inputs": "node scripts/build-cua-driver-provider.mjs --verify-only --platform darwin --output-dir /tmp/ling-cua-driver-verify",
-    "package:mac": "node scripts/package-cua-driver.mjs --platform darwin --arch arm64",
-    "package:win": "node scripts/package-cua-driver.mjs --platform win32 --arch x64"
+    "test": "node --test test/*.test.mjs"
   },
-  "devDependencies": { "jszip": "3.10.2" }
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22.22.1"
+  }
 }

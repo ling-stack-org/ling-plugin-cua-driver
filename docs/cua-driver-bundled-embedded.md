@@ -104,7 +104,7 @@ The page has five sections:
 4. **Lock behavior**: non-visual tasks continue while the computer is locked, but Computer
    Control closes its gate and retires the current provider generation. Settings explains
    the fixed pause-and-resume behavior defined in
-   [Lock-Aware Task Continuation](locked-computer-control-policy.md); there is no locked-control
+   [Lock-Aware Task Continuation](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/locked-computer-control-policy.md); there is no locked-control
    Switch. Per-application allowlists are not shown until Ling has an enforceable application
    boundary.
 5. **Advanced**: provider display version, Ling build revision, platform, integrity result,
@@ -342,12 +342,12 @@ records an explicit prerelease exception.
 Related documents:
 
 - [Bundled Embedded Cua Driver Detailed Design](cua-driver-bundled-embedded-detailed-design.md)
-- [Bundled Embedded Cua Driver Implementation Plan](cua-driver-bundled-embedded-implementation-plan.md)
+- [Bundled Embedded Cua Driver Implementation Plan](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/cua-driver-bundled-embedded-implementation-plan.md)
 - [Cua Driver Guided Installation](cua-driver-guided-installation.md)
-- [Desktop Shell](desktop-shell.md)
-- [Desktop Computer Use Picture-in-Picture](desktop-computer-use-picture-in-picture.md)
-- [Plugin Manager](plugin-manager.md)
-- [Desktop Release Acceptance](../release/desktop.md)
+- [Desktop Shell](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/desktop-shell.md)
+- [Desktop Computer Use Picture-in-Picture](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/desktop-computer-use-picture-in-picture.md)
+- [Plugin Manager](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-manager.md)
+- [Desktop Release Acceptance](https://github.com/ling-stack-org/ling-stack/blob/main/docs/release/desktop.md)
 - [Upstream v0.8.3 Embedding Contract](https://github.com/trycua/cua/blob/cua-driver-rs-v0.8.3/libs/cua-driver/rust/Skills/cua-driver/EMBEDDING.md)
 - [Upstream v0.8.3 Release](https://github.com/trycua/cua/releases/tag/cua-driver-rs-v0.8.3)
 - [Upstream MIT License](https://github.com/trycua/cua/blob/cua-driver-rs-v0.8.3/LICENSE.md)
@@ -760,7 +760,7 @@ Migration rules:
 - Bundled V1 never controls a locked computer. Lock/suspend/session invalidation closes the
   call gate, revokes the current generation and retains requested intent for a fresh
   post-unlock readiness pass. This fixed behavior is defined by
-  [Lock-Aware Task Continuation](locked-computer-control-policy.md); changing it requires a
+  [Lock-Aware Task Continuation](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/locked-computer-control-policy.md); changing it requires a
   new product and security design.
 - The Ling-managed embedded path never invokes or exposes updater/install operations,
   performs background provider downloads, or falls back to unreviewed `PATH` entries.

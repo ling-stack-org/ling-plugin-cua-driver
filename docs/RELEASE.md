@@ -14,4 +14,13 @@ The Windows build validates that the owned probe can run at Medium integrity bef
 
 The native workflow validates each candidate attestation and repeats the executable version check in an owned process. On Windows this uses the locked compiler environment. The compare job checks the candidate payload digests across the two runners.
 
-A reviewed, signed runtime tree preserves the Ling resource layout under `runtime/providers/cua-driver/<distribution-revision>/`. Include the lock, license and notices, the native binary, the provider seal, and the Windows integrity catalog when applicable. Publish the platform archive with its provenance and submit its immutable release URL to the [official catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).
+Build the release archive on the corresponding target after approving the source build and signing its native runtime. The signed revision directory contains the promoted lock, license, notices, platform executable and provider seal. Windows also includes the signed integrity catalog. The packaging command verifies the promoted lock, sealed digests and the platform signatures before archiving the selected files.
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm package:release /path/to/signed/0.8.3-ling.1 /path/to/output 0.6.1
+```
+
+Pass the minimum Ling version supported by the reviewed runtime. On macOS, set `LING_CUA_DARWIN_EXPECTED_TEAM_ID` to the release Team ID. On Windows, use the SDK Developer shell with `signtool.exe` on PATH and set `LING_CUA_PROVIDER_SIGNER_SHA256` and `LING_CUA_CATALOG_SIGNER_SHA256` to the reviewed production certificate fingerprints.
+
+Build both platform archives from the same source commit. Publish them and their SHA-256 sidecars under a new stable tag matching the plugin version after completing the platform release checks. Submit the tag, source commit and both archive digests to the [official Ling catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).

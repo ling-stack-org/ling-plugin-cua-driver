@@ -15,8 +15,9 @@ import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import {
   readAtomicPublishDirectoryIdentities,
-  securePrivateStagingDirectory,
-  verifyPrivateStagingDirectorySecurity,
+  runOwnedWindowsProcess,
+  secureManagedStateDirectory,
+  verifyManagedStateDirectorySecurity,
   withAtomicPublishParentLease,
 } from "./cua-driver-package-atomic-publish.mjs";
 
@@ -28,7 +29,16 @@ const HEALTH_SCHEMA_VERSION = "1";
 const PROVIDER_VERSION = "0.8.3";
 const MAX_MCP_LINE_BYTES = 4 * 1024 * 1024;
 const MAX_MCP_STDOUT_BYTES = 16 * 1024 * 1024;
+const MAX_STARTUP_STDERR_BYTES = 16 * 1024;
 const WINDOWS_FULL_CONTROL_MASK = 2_032_127;
+const STARTUP_FAILURES = [
+  [/^cua-driver: invalid Ling-managed environment: .*managed DACL/m, "managed state ACL"],
+  [/^cua-driver: invalid Ling-managed environment:/m, "managed state"],
+  [/^cua-driver: invalid Ling-managed lifetime:/m, "host lifetime"],
+  [/^cua-driver: cua_windows_lifecycle_unavailable:/m, "Windows job ownership"],
+  [/^cua-driver: managed readiness provider registration failed/m, "managed readiness registration"],
+  [/^cua-driver: invalid Ling input-fence environment:/m, "input-fence configuration"],
+];
 
 export const FROZEN_HEALTH_SKIP = Object.freeze([
   "ax_capability",
@@ -39,6 +49,22 @@ export const FROZEN_HEALTH_SKIP = Object.freeze([
 ]);
 
 export const FROZEN_DENIED_TOOLS = Object.freeze(["check_for_update"]);
+
+/** Launch the release probe on Windows with a Desktop-equivalent user token. */
+export async function probeCuaDriverRelease(input) {
+  if (input.platform !== "win32-x64") return probeCuaDriverProvider(input);
+  const { parentIdentity, directoryIdentity } = await prepareManagedProbeStateHome(input.stateHome);
+  const preparedState = { parentIdentity, directoryIdentity };
+  const program = `
+    import { probeCuaDriverProvider } from ${JSON.stringify(import.meta.url)};
+    const probe = await probeCuaDriverProvider(JSON.parse(process.argv[1]));
+    process.stdout.write(JSON.stringify(probe));
+  `;
+  const { stdout } = await runOwnedWindowsProcess(process.execPath, [
+    "--input-type=module", "--eval", program, JSON.stringify({ ...input, preparedState }),
+  ], { standardUser: true, encoding: "utf8", timeout: 180_000, maxBuffer: 1024 * 1024 });
+  return JSON.parse(stdout);
+}
 
 /**
  * Run the built provider through its real embedded stdio MCP boundary and
@@ -59,6 +85,7 @@ export async function probeCuaDriverProvider({
   spawnProcess = spawn,
   performStateAcceptance = true,
   inspectWindowsAcl = inspectManagedWindowsAcl,
+  preparedState,
 }) {
   if (!binaryPath || !stateHome) throw new TypeError("binaryPath and stateHome are required");
   if (platform !== "darwin" && platform !== "win32-x64") {
@@ -85,7 +112,17 @@ export async function probeCuaDriverProvider({
   const externalHome = `${stateHome}-external-home`;
   const rootLink = `${stateHome}-root-link`;
   const rootLinkTarget = `${stateHome}-root-link-target`;
-  await prepareManagedProbeStateHome(stateHome);
+  if (preparedState) {
+    const parentRoot = dirname(stateHome);
+    await withAtomicPublishParentLease({ parentRoot }, (lease) => verifyManagedStateDirectorySecurity({
+      directoryName: basename(stateHome),
+      expectedDirectoryIdentity: preparedState.directoryIdentity,
+      expectedParentIdentity: preparedState.parentIdentity,
+      parentRoot,
+    }, lease));
+  } else {
+    await prepareManagedProbeStateHome(stateHome);
+  }
   await mkdir(join(externalHome, ".cua-driver"), { recursive: true });
   await mkdir(join(externalHome, ".cua-driver-rs"), { recursive: true });
   await writeFile(join(externalHome, ".cua-driver", "sentinel.bin"), "external-cua-driver-state");
@@ -205,21 +242,14 @@ export async function prepareManagedProbeStateHome(stateHome) {
       sourceName: directoryName,
     }, lease);
     lease.assertHeld();
-    const secured = await securePrivateStagingDirectory({
+    const verified = await secureManagedStateDirectory({
       directoryName,
       expectedDirectoryIdentity: identities.sourceIdentity,
       expectedParentIdentity: identities.parentIdentity,
       parentRoot,
     }, lease);
     lease.assertHeld();
-    await verifyPrivateStagingDirectorySecurity({
-      directoryName,
-      expectedDirectoryIdentity: secured.directoryIdentity,
-      expectedParentIdentity: secured.parentIdentity,
-      parentRoot,
-    }, lease);
-    lease.assertHeld();
-    return secured;
+    return verified;
   });
 }
 
@@ -259,6 +289,7 @@ async function runProviderSession({
   const responses = new Map();
   let stdoutBuffer = "";
   let stdoutBytes = 0;
+  let startupStderr = Buffer.alloc(0);
   const stdoutDecoder = new StringDecoder("utf8");
   let stdoutDecoderFlushed = false;
   let stdinClosed = false;
@@ -304,16 +335,19 @@ async function runProviderSession({
       child.stdin.end();
     };
     child.on("error", fail);
-    child.on("exit", (code, signal) => {
-      if (!settled && !stdinClosed) {
-        fail(new Error(`provider exited before probe completed: code=${code} signal=${signal ?? "none"}`));
-      }
-    });
     child.on("close", (code, signal) => {
       if (settled) return;
       if (!stdoutDecoderFlushed) {
         stdoutBuffer += stdoutDecoder.end();
         stdoutDecoderFlushed = true;
+      }
+      if (!stdinClosed) {
+        const startupFailure = code === 78
+          ? STARTUP_FAILURES.find(([pattern]) => pattern.test(startupStderr.toString("utf8")))?.[1]
+          : undefined;
+        const detail = startupFailure ? ` stage=${startupFailure}` : "";
+        fail(new Error(`provider exited before probe completed: code=${code} signal=${signal ?? "none"}${detail}`));
+        return;
       }
       if (code !== 0 || signal !== null) {
         fail(new Error(`provider probe exited with code ${code} signal=${signal ?? "none"}`));
@@ -467,9 +501,11 @@ async function runProviderSession({
         fail(new Error(`provider MCP response exceeded ${MAX_MCP_LINE_BYTES} bytes without a delimiter`));
       }
     });
-    child.stderr.on("data", () => {
-      // Provider diagnostics are intentionally not part of the attestation;
-      // they may contain runner-specific paths and process ids.
+    child.stderr.on("data", (chunk) => {
+      // Report only known startup failure categories in CI, never raw stderr.
+      if (responses.has(1) || startupStderr.length >= MAX_STARTUP_STDERR_BYTES) return;
+      const remaining = MAX_STARTUP_STDERR_BYTES - startupStderr.length;
+      startupStderr = Buffer.concat([startupStderr, Buffer.from(chunk).subarray(0, remaining)]);
     });
     child.stdin.on("error", (error) => {
       if (error.code !== "EPIPE") fail(error);
@@ -816,31 +852,29 @@ function validateManagedReadiness(value, { childPid, hostPid, nonce }) {
   if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedKeys)) {
     throw new Error("provider readiness response keys do not match the locked contract");
   }
-  if (
-    value.schemaVersion !== 1
-    || value.childInstanceNonce !== nonce
-    || value.leaseGeneration !== 1
-    || value.readinessSequence !== 1
-    || value.hostProcessId !== hostPid
-    || !Number.isSafeInteger(childPid)
-    || childPid <= 0
-    || value.providerProcessId !== childPid
-    || !Number.isSafeInteger(value.hostSessionId)
-    || value.hostSessionId <= 0
-    || !Number.isSafeInteger(value.providerSessionId)
-    || value.providerSessionId <= 0
-    || value.providerSessionId !== value.hostSessionId
-    || value.hostIntegrityLevel !== "medium"
-    || value.providerIntegrityLevel !== "medium"
-    || value.inputDesktop !== "default_unlocked"
-    || value.jobObjectAssigned !== true
-    || value.killOnJobClose !== true
-    || value.uiaRuntime !== "available"
-    || value.d3d11 !== "available"
-    || value.wgcApi !== "supported"
-    || value.contentObserved !== false
-  ) {
-    throw new Error("provider readiness identity or lifetime invariant failed");
+  const checks = {
+    schemaVersion: value.schemaVersion === 1,
+    childInstanceNonce: value.childInstanceNonce === nonce,
+    leaseGeneration: value.leaseGeneration === 1,
+    readinessSequence: value.readinessSequence === 1,
+    hostProcessId: value.hostProcessId === hostPid,
+    providerProcessId: Number.isSafeInteger(childPid) && childPid > 0
+      && value.providerProcessId === childPid,
+    interactiveSession: Number.isSafeInteger(value.hostSessionId) && value.hostSessionId > 0
+      && value.providerSessionId === value.hostSessionId,
+    hostIntegrityLevel: value.hostIntegrityLevel === "medium",
+    providerIntegrityLevel: value.providerIntegrityLevel === "medium",
+    inputDesktop: value.inputDesktop === "default_unlocked",
+    jobObjectAssigned: value.jobObjectAssigned === true,
+    killOnJobClose: value.killOnJobClose === true,
+    uiaRuntime: value.uiaRuntime === "available",
+    d3d11: value.d3d11 === "available",
+    wgcApi: value.wgcApi === "supported",
+    contentObserved: value.contentObserved === false,
+  };
+  const failed = Object.keys(checks).filter((key) => !checks[key]);
+  if (failed.length > 0) {
+    throw new Error(`provider readiness identity or lifetime invariant failed: ${failed.join(", ")}`);
   }
   return {
     schemaVersion: 1,

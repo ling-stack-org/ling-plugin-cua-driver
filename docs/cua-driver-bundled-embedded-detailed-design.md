@@ -1140,7 +1140,7 @@ the scan has no special lock-file exclusion.
 Cleanup is an explicit operator action through `cleanupCuaDriverStagingResidue()` or:
 
 ```bash
-node apps/desktop/scripts/cua-driver-package-staging.mjs \
+node scripts/cua-driver-package-staging.mjs \
   --list-residue \
   --output-root <originalOutputRoot>
 ```
@@ -1154,7 +1154,7 @@ matching roots. If a legacy directory already exceeds the count quota, the resul
 with respect to payload roots and never converts an unsafe path into cleanup authority.
 
 ```bash
-node apps/desktop/scripts/cua-driver-package-staging.mjs \
+node scripts/cua-driver-package-staging.mjs \
   --cleanup-residue <residuePath> \
   --output-root <originalOutputRoot> \
   --expected-residue-identity <residueIdentity>

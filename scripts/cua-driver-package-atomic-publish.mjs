@@ -69,7 +69,9 @@ const NATIVE_PARENT_LEASE_OPERATIONS = new Set([
   "remove-artifact-tree",
   "remove-tree",
   "remove-unsecured-empty",
+  "secure-managed-state",
   "secure-private",
+  "verify-managed-state",
   "verify-private",
 ]);
 const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
@@ -330,6 +332,37 @@ export async function verifyPrivateStagingDirectorySecurity(input, parentLease) 
   return privateDirectoryReceipt(receipt, "verified");
 }
 
+/** Apply and recheck the provider's private state policy under the parent lease. */
+export async function secureManagedStateDirectory(input, parentLease) {
+  await managedStateDirectoryOperation(input, parentLease, "secure-managed-state", "secured");
+  return verifyManagedStateDirectorySecurity(input, parentLease);
+}
+
+export async function verifyManagedStateDirectorySecurity(input, parentLease) {
+  return managedStateDirectoryOperation(input, parentLease, "verify-managed-state", "verified");
+}
+
+async function managedStateDirectoryOperation(input, parentLease, operation, outcome) {
+  const parentRoot = await requireCanonicalParent(input?.parentRoot);
+  const directoryName = requireLeafName(input?.directoryName);
+  const expectedParentIdentity = requireNativeIdentity(
+    input?.expectedParentIdentity,
+    "expectedParentIdentity",
+  );
+  const expectedDirectoryIdentity = requireNativeIdentity(
+    input?.expectedDirectoryIdentity,
+    "expectedDirectoryIdentity",
+  );
+  const identities = {
+    parentIdentity: expectedParentIdentity,
+    directoryIdentity: expectedDirectoryIdentity,
+  };
+  const capability = requireNativeParentLeaseCapability(parentLease, parentRoot);
+  const args = [directoryName, expectedParentIdentity, expectedDirectoryIdentity];
+  const receipt = await invokeNativeParentLeaseOperation(capability, operation, args);
+  return privateDirectoryReceipt(receipt, outcome, identities, true);
+}
+
 /**
  * Remove one exact private directory tree relative to a pinned parent. The
  * native helper reopens and binds the root identity, preflights the complete
@@ -502,6 +535,7 @@ export async function runOwnedWindowsProcess(command, args, options = {}) {
     "env",
     "maxBuffer",
     "signal",
+    "standardUser",
     "timeout",
     "windowsHide",
   ]);
@@ -512,14 +546,20 @@ export async function runOwnedWindowsProcess(command, args, options = {}) {
       `unsupported owned process option: ${unexpected}`,
     );
   }
-  const execOptions = { ...options };
+  const { standardUser, ...execOptions } = options;
+  if (standardUser !== undefined && typeof standardUser !== "boolean") {
+    throw new CuaDriverAtomicPublishError(
+      "staging_owned_process_options_invalid",
+      "standardUser must be a boolean",
+    );
+  }
   delete execOptions.windowsHide;
   const nativePublisher = await getNativePublisher();
   await assertNativePublisherIdentity(nativePublisher);
   try {
     return await execFile(
       nativePublisher.path,
-      ["run-owned", command, ...args],
+      [standardUser ? "run-owned-standard-user" : "run-owned", command, ...args],
       {
         ...execOptions,
         windowsHide: true,
@@ -1259,7 +1299,9 @@ function assertNativeParentLeaseOperationReceipt(receipt, operation, args) {
     "remove-artifact-tree": "removed",
     "remove-tree": "removed",
     "remove-unsecured-empty": "removed",
+    "secure-managed-state": "secured",
     "secure-private": "secured",
+    "verify-managed-state": "verified",
     "verify-private": "verified",
   }[operation];
   if (receipt.outcome !== expectedOutcome) {
@@ -1289,7 +1331,7 @@ function assertNativeParentLeaseOperationReceipt(receipt, operation, args) {
     }
     return;
   }
-  if (operation === "secure-private" || operation === "verify-private") {
+  if (expectedOutcome === "secured" || expectedOutcome === "verified") {
     const expectedIdentities = args.length === 3
       ? Object.freeze({
           directoryIdentity: args[2],
@@ -1299,8 +1341,9 @@ function assertNativeParentLeaseOperationReceipt(receipt, operation, args) {
     try {
       privateDirectoryReceipt(
         receipt,
-        operation === "secure-private" ? "secured" : "verified",
+        expectedOutcome,
         expectedIdentities,
+        operation === "secure-managed-state" || operation === "verify-managed-state",
       );
     } catch (cause) {
       throw parentLeaseProtocolError(
@@ -1744,14 +1787,17 @@ function hasCompleteNativeParentLeaseReceiptContext(value) {
     || context.every((entry) => entry !== undefined);
 }
 
-function privateDirectoryReceipt(receipt, expectedOutcome, expectedIdentities) {
+function privateDirectoryReceipt(receipt, expectedOutcome, expectedIdentities, managedState = false) {
   if (receipt.outcome !== expectedOutcome) {
     throw nativeReceiptError(receipt);
   }
-  const expectedProfile = process.platform === "darwin"
-    ? "current-euid-mode-0700"
-    : "protected-dacl-current-user-system-administrators";
   const expectedInheritance = process.platform === "win32";
+  let expectedProfile = "current-euid-mode-0700";
+  if (expectedInheritance) {
+    expectedProfile = managedState
+      ? "protected-dacl-current-user"
+      : "protected-dacl-current-user-system-administrators";
+  }
   if (receipt.reason !== expectedOutcome
     || receipt.parentIdentity === undefined
     || receipt.directoryIdentity === undefined
@@ -1939,6 +1985,7 @@ function isOptionalOwnerIdentity(value) {
 function isOptionalSecurityProfile(value) {
   return value === undefined
     || value === "current-euid-mode-0700"
+    || value === "protected-dacl-current-user"
     || value === "protected-dacl-current-user-system-administrators";
 }
 

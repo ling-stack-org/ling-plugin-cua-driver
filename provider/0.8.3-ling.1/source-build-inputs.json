@@ -48,7 +48,7 @@
   "patchSet": {
     "id": "ling-managed-embedded-v1",
     "manifest": "patches/ling-managed-embedded-v1/series.json",
-    "sha256": "edb89636dab1f7d2b9db85bcfa88d2979f8c25f5d14bb2af83033a3ca9f1822c",
+    "sha256": "2262742c72560b15195f057584edf367088c2962ef97de0553146fb817b5192b",
     "implementationStatus": "runtime_integrated"
   },
   "toolchain": {
@@ -90,7 +90,8 @@
     },
     "win32X64": {
       "visualStudioVersion": "17.14.37502.11",
-      "msvcToolsetVersion": "14.44.35211",
+      "msvcToolsetVersion": "14.44.35207",
+      "msvcCompilerProductVersion": "14.44.35228.0",
       "windowsSdkVersion": "10.0.26100.0",
       "target": "x86_64-pc-windows-msvc"
     }

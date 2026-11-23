@@ -1789,6 +1789,13 @@ PublishResult DispatchParentLockOperationOnDarwin(
         parent_root, arguments[0], false, arguments[1], arguments[2],
         held_parent_fd);
   }
+  if ((operation == "secure-managed-state" ||
+       operation == "verify-managed-state") &&
+      arguments.size() == 3 && !arguments[1].empty() && !arguments[2].empty()) {
+    return PrivateDirectoryOnDarwin(
+        parent_root, arguments[0], operation == "secure-managed-state",
+        arguments[1], arguments[2], held_parent_fd);
+  }
   if (operation == "publish" && arguments.size() == 4) {
     return PublishOnDarwin(
         parent_root, arguments[0], arguments[1], arguments[2], arguments[3],
@@ -2361,6 +2368,41 @@ void AppendUniqueSid(std::vector<PSID>* values, PSID candidate) {
   values->push_back(candidate);
 }
 
+enum class PrivateDirectoryProfile { kPackageStaging, kManagedState };
+
+struct PrivateDirectoryPrincipals {
+  std::vector<std::byte> token_buffer;
+  std::vector<BYTE> system_sid_buffer;
+  std::vector<BYTE> administrators_sid_buffer;
+  PSID owner = nullptr;
+  std::vector<PSID> allowed;
+};
+
+bool ReadPrivateDirectoryPrincipals(
+    PrivateDirectoryProfile profile, PrivateDirectoryPrincipals* principals,
+    DWORD* error_code) {
+  if (!ReadCurrentUserSid(&principals->token_buffer, &principals->owner,
+                          error_code)) {
+    return false;
+  }
+  principals->allowed.push_back(principals->owner);
+  if (profile == PrivateDirectoryProfile::kPackageStaging) {
+    PSID system_sid = nullptr;
+    PSID administrators_sid = nullptr;
+    if (!CreatePinnedWellKnownSid(WinLocalSystemSid,
+                                 &principals->system_sid_buffer, &system_sid,
+                                 error_code) ||
+        !CreatePinnedWellKnownSid(WinBuiltinAdministratorsSid,
+                                 &principals->administrators_sid_buffer,
+                                 &administrators_sid, error_code)) {
+      return false;
+    }
+    AppendUniqueSid(&principals->allowed, system_sid);
+    AppendUniqueSid(&principals->allowed, administrators_sid);
+  }
+  return true;
+}
+
 bool SidToAsciiString(PSID sid, std::string* value, DWORD* error_code) {
   LPSTR text = nullptr;
   if (!ConvertSidToStringSidA(sid, &text)) {
@@ -2374,13 +2416,9 @@ bool SidToAsciiString(PSID sid, std::string* value, DWORD* error_code) {
 }
 
 bool ApplyPrivateDirectorySecurityOnWindows(
-    HANDLE directory, PSID current_user_sid, PSID system_sid,
-    PSID administrators_sid, DWORD* error_code) {
-  std::vector<PSID> allowed_sids;
-  AppendUniqueSid(&allowed_sids, current_user_sid);
-  AppendUniqueSid(&allowed_sids, system_sid);
-  AppendUniqueSid(&allowed_sids, administrators_sid);
-
+    HANDLE directory, const PrivateDirectoryPrincipals& principals,
+    DWORD* error_code) {
+  const auto& allowed_sids = principals.allowed;
   std::vector<EXPLICIT_ACCESSW> entries(allowed_sids.size());
   for (std::size_t index = 0; index < allowed_sids.size(); ++index) {
     entries[index].grfAccessPermissions = FILE_ALL_ACCESS;
@@ -2402,7 +2440,7 @@ bool ApplyPrivateDirectorySecurityOnWindows(
       OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION |
       PROTECTED_DACL_SECURITY_INFORMATION;
   const DWORD set_error = SetSecurityInfo(
-      directory, SE_FILE_OBJECT, security_information, current_user_sid,
+      directory, SE_FILE_OBJECT, security_information, principals.owner,
       nullptr, raw_acl, nullptr);
   if (set_error != ERROR_SUCCESS) {
     *error_code = set_error;
@@ -2413,9 +2451,8 @@ bool ApplyPrivateDirectorySecurityOnWindows(
 }
 
 bool VerifyPrivateDirectorySecurityOnWindows(
-    HANDLE directory, PSID current_user_sid, PSID system_sid,
-    PSID administrators_sid, std::string* owner_identity,
-    DWORD* error_code) {
+    HANDLE directory, const PrivateDirectoryPrincipals& principals,
+    std::string* owner_identity, DWORD* error_code) {
   PSID owner_sid = nullptr;
   PACL dacl = nullptr;
   PSECURITY_DESCRIPTOR raw_descriptor = nullptr;
@@ -2430,7 +2467,7 @@ bool VerifyPrivateDirectorySecurityOnWindows(
   ScopedLocalMemory descriptor_memory(
       reinterpret_cast<HLOCAL>(raw_descriptor));
   if (owner_sid == nullptr || !IsValidSid(owner_sid) ||
-      !EqualSid(owner_sid, current_user_sid) || dacl == nullptr ||
+      !EqualSid(owner_sid, principals.owner) || dacl == nullptr ||
       !IsValidAcl(dacl)) {
     *error_code = ERROR_INVALID_SECURITY_DESCR;
     return false;
@@ -2450,10 +2487,7 @@ bool VerifyPrivateDirectorySecurityOnWindows(
     return false;
   }
 
-  std::vector<PSID> allowed_sids;
-  AppendUniqueSid(&allowed_sids, current_user_sid);
-  AppendUniqueSid(&allowed_sids, system_sid);
-  AppendUniqueSid(&allowed_sids, administrators_sid);
+  const auto& allowed_sids = principals.allowed;
   if (static_cast<std::size_t>(dacl->AceCount) != allowed_sids.size()) {
     *error_code = ERROR_INVALID_ACL;
     return false;
@@ -2504,7 +2538,7 @@ bool VerifyPrivateDirectorySecurityOnWindows(
       return false;
     }
   }
-  return SidToAsciiString(current_user_sid, owner_identity, error_code);
+  return SidToAsciiString(principals.owner, owner_identity, error_code);
 }
 
 bool ReadCurrentUserOwnerOnWindows(HANDLE directory, PSID current_user_sid,
@@ -2827,7 +2861,8 @@ PublishResult PrivateDirectoryOnWindows(
     const std::wstring& parent_root, const std::wstring& directory_name,
     bool apply_security, const std::string& expected_parent_identity,
     const std::string& expected_directory_identity,
-    HANDLE held_parent = INVALID_HANDLE_VALUE) {
+    HANDLE held_parent = INVALID_HANDLE_VALUE,
+    PrivateDirectoryProfile profile = PrivateDirectoryProfile::kPackageStaging) {
   if (parent_root.empty() || !IsValidLeafName(directory_name)) {
     return InvalidInput();
   }
@@ -2893,33 +2928,20 @@ PublishResult PrivateDirectoryOnWindows(
     return NotCommitted("directory_identity_mismatch", 0);
   }
 
-  std::vector<std::byte> token_buffer;
-  std::vector<BYTE> system_sid_buffer;
-  std::vector<BYTE> administrators_sid_buffer;
-  PSID current_user_sid = nullptr;
-  PSID system_sid = nullptr;
-  PSID administrators_sid = nullptr;
+  PrivateDirectoryPrincipals principals;
   DWORD security_error = ERROR_SUCCESS;
-  if (!ReadCurrentUserSid(&token_buffer, &current_user_sid,
-                          &security_error) ||
-      !CreatePinnedWellKnownSid(WinLocalSystemSid, &system_sid_buffer,
-                                &system_sid, &security_error) ||
-      !CreatePinnedWellKnownSid(WinBuiltinAdministratorsSid,
-                                &administrators_sid_buffer,
-                                &administrators_sid, &security_error)) {
+  if (!ReadPrivateDirectoryPrincipals(profile, &principals, &security_error)) {
     return NotCommitted("directory_security_unavailable",
                         static_cast<std::uint64_t>(security_error));
   }
   if (apply_security && !ApplyPrivateDirectorySecurityOnWindows(
-                            directory.get(), current_user_sid, system_sid,
-                            administrators_sid, &security_error)) {
+                            directory.get(), principals, &security_error)) {
     return NotCommitted("directory_security_set_failed",
                         static_cast<std::uint64_t>(security_error));
   }
   std::string owner_identity;
   if (!VerifyPrivateDirectorySecurityOnWindows(
-          directory.get(), current_user_sid, system_sid, administrators_sid,
-          &owner_identity, &security_error)) {
+          directory.get(), principals, &owner_identity, &security_error)) {
     return NotCommitted("directory_security_invalid",
                         static_cast<std::uint64_t>(security_error));
   }
@@ -2977,7 +2999,10 @@ PublishResult PrivateDirectoryOnWindows(
   return PrivateDirectorySuccess(
       apply_security ? "secured" : "verified", parent_identity,
       directory_identity, owner_identity,
-      "protected-dacl-current-user-system-administrators", true);
+      profile == PrivateDirectoryProfile::kManagedState
+          ? "protected-dacl-current-user"
+          : "protected-dacl-current-user-system-administrators",
+      true);
 }
 
 struct RemovalEntryWindows {
@@ -3489,23 +3514,14 @@ PublishResult RemoveTreeOnWindows(
     return NotCommitted("source_identity_mismatch", 0);
   }
 
-  std::vector<std::byte> token_buffer;
-  std::vector<BYTE> system_sid_buffer;
-  std::vector<BYTE> administrators_sid_buffer;
-  PSID current_user_sid = nullptr;
-  PSID system_sid = nullptr;
-  PSID administrators_sid = nullptr;
+  PrivateDirectoryPrincipals principals;
   DWORD security_error = ERROR_SUCCESS;
   std::string owner_identity;
-  if (!ReadCurrentUserSid(&token_buffer, &current_user_sid, &security_error) ||
-      !CreatePinnedWellKnownSid(WinLocalSystemSid, &system_sid_buffer,
-                                &system_sid, &security_error) ||
-      !CreatePinnedWellKnownSid(WinBuiltinAdministratorsSid,
-                                &administrators_sid_buffer,
-                                &administrators_sid, &security_error) ||
+  if (!ReadPrivateDirectoryPrincipals(
+          PrivateDirectoryProfile::kPackageStaging, &principals,
+          &security_error) ||
       !VerifyPrivateDirectorySecurityOnWindows(
-          source.get(), current_user_sid, system_sid, administrators_sid,
-          &owner_identity, &security_error)) {
+          source.get(), principals, &owner_identity, &security_error)) {
     return NotCommitted("directory_security_invalid",
                         static_cast<std::uint64_t>(security_error));
   }
@@ -3630,6 +3646,75 @@ int OwnedProcessFailure(const wchar_t* phase, DWORD error_code) {
   return kExitNotCommitted;
 }
 
+// Use the current account and logon session for the release probe. Restrict
+// elevated runners to the integrity level of the Desktop process being tested.
+bool PrepareStandardUserToken(ScopedHandle* restricted, DWORD* error_code) {
+  HANDLE raw_token = INVALID_HANDLE_VALUE;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE |
+                            TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
+                        &raw_token)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  ScopedHandle token(raw_token);
+  DWORD token_size = 0;
+  if (GetTokenInformation(token.get(), TokenIntegrityLevel, nullptr, 0,
+                          &token_size) ||
+      GetLastError() != ERROR_INSUFFICIENT_BUFFER || token_size == 0) {
+    *error_code = GetLastError();
+    return false;
+  }
+  std::vector<std::byte> integrity(token_size);
+  if (!GetTokenInformation(token.get(), TokenIntegrityLevel, integrity.data(),
+                           token_size, &token_size)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  const auto* label =
+      reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(integrity.data());
+  PSID sid = label->Label.Sid;
+  if (!IsValidSid(sid) || *GetSidSubAuthorityCount(sid) == 0) {
+    *error_code = ERROR_INVALID_SID;
+    return false;
+  }
+  const DWORD sub_authorities = *GetSidSubAuthorityCount(sid);
+  const DWORD rid = *GetSidSubAuthority(sid, sub_authorities - 1);
+  if (rid == SECURITY_MANDATORY_MEDIUM_RID ||
+      rid == SECURITY_MANDATORY_MEDIUM_PLUS_RID) {
+    return true;
+  }
+  if (rid < SECURITY_MANDATORY_MEDIUM_RID) {
+    *error_code = ERROR_ACCESS_DENIED;
+    return false;
+  }
+
+  HANDLE raw_restricted = INVALID_HANDLE_VALUE;
+  if (!CreateRestrictedToken(token.get(), DISABLE_MAX_PRIVILEGE | LUA_TOKEN,
+                             0, nullptr, 0, nullptr, 0, nullptr,
+                             &raw_restricted)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  restricted->reset(raw_restricted);
+  std::vector<BYTE> sid_buffer;
+  PSID medium_sid = nullptr;
+  if (!CreatePinnedWellKnownSid(WinMediumLabelSid, &sid_buffer, &medium_sid,
+                                error_code)) {
+    return false;
+  }
+  TOKEN_MANDATORY_LABEL medium {};
+  medium.Label.Sid = medium_sid;
+  medium.Label.Attributes = SE_GROUP_INTEGRITY;
+  const DWORD label_size =
+      static_cast<DWORD>(sizeof(medium)) + GetLengthSid(medium_sid);
+  if (!SetTokenInformation(restricted->get(), TokenIntegrityLevel, &medium,
+                           label_size)) {
+    *error_code = GetLastError();
+    return false;
+  }
+  return true;
+}
+
 int RunOwnedWindowsProcess(int argc, wchar_t* argv[]) {
   if (argc < 3 || !IsAbsoluteWindowsCommand(argv[2])) {
     return OwnedProcessFailure(L"input", ERROR_INVALID_PARAMETER);
@@ -3707,11 +3792,25 @@ int RunOwnedWindowsProcess(int argc, wchar_t* argv[]) {
   startup.StartupInfo.hStdOutput = standard_output.get();
   startup.StartupInfo.hStdError = standard_error_handle.get();
   startup.lpAttributeList = attributes.get();
+  ScopedHandle restricted;
+  if (std::wstring(argv[1]) == L"run-owned-standard-user") {
+    DWORD token_error = ERROR_SUCCESS;
+    if (!PrepareStandardUserToken(&restricted, &token_error)) {
+      return OwnedProcessFailure(L"standard-user-token", token_error);
+    }
+  }
   PROCESS_INFORMATION process_info {};
-  if (!CreateProcessW(
-          command.c_str(), command_line.data(), nullptr, nullptr, TRUE,
-          CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
-          nullptr, nullptr, &startup.StartupInfo, &process_info)) {
+  constexpr DWORD creation_flags =
+      CREATE_SUSPENDED | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT;
+  const BOOL created = restricted.valid()
+      ? CreateProcessAsUserW(restricted.get(), command.c_str(),
+                             command_line.data(), nullptr, nullptr, TRUE,
+                             creation_flags, nullptr, nullptr,
+                             &startup.StartupInfo, &process_info)
+      : CreateProcessW(command.c_str(), command_line.data(), nullptr, nullptr,
+                       TRUE, creation_flags, nullptr, nullptr,
+                       &startup.StartupInfo, &process_info);
+  if (!created) {
     return OwnedProcessFailure(L"create-process", GetLastError());
   }
   ScopedHandle process(process_info.hProcess);
@@ -4115,6 +4214,20 @@ PublishResult DispatchParentLockOperationOnWindows(
         parent_root, directory_name, false, arguments[1], arguments[2],
         held_parent);
   }
+  if ((operation == "secure-managed-state" ||
+       operation == "verify-managed-state") &&
+      arguments.size() == 3 && !arguments[1].empty() && !arguments[2].empty()) {
+    std::wstring directory_name;
+    if (!ProtocolUtf8ToWide(arguments[0], &directory_name) ||
+        !ProtocolValueIsAscii(arguments[1]) ||
+        !ProtocolValueIsAscii(arguments[2])) {
+      return InvalidInput();
+    }
+    return PrivateDirectoryOnWindows(
+        parent_root, directory_name, operation == "secure-managed-state",
+        arguments[1], arguments[2], held_parent,
+        PrivateDirectoryProfile::kManagedState);
+  }
   if (operation == "publish" && arguments.size() == 4) {
     std::wstring source_name;
     std::wstring destination_name;
@@ -4318,7 +4431,8 @@ int wmain(int argc, wchar_t* argv[]) {
     }
     return HoldParentLockOnWindows(argv[2], timeout_ms);
   }
-  if (argc >= 3 && std::wstring(argv[1]) == L"run-owned") {
+  if (argc >= 3 && (std::wstring(argv[1]) == L"run-owned" ||
+                    std::wstring(argv[1]) == L"run-owned-standard-user")) {
     return RunOwnedWindowsProcess(argc, argv);
   }
   if (argc == 4 && std::wstring(argv[1]) == L"inspect") {

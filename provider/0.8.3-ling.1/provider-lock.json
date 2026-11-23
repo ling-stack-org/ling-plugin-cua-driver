@@ -13,7 +13,8 @@
     "licenseSha256": "c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9"
   },
   "enabledPlatforms": [
-    "darwin"
+    "darwin",
+    "win32-x64"
   ],
   "platforms": {
     "darwin": {
@@ -43,11 +44,11 @@
         ],
         "patchSet": {
           "id": "ling-managed-embedded-v1",
-          "sha256": "edb89636dab1f7d2b9db85bcfa88d2979f8c25f5d14bb2af83033a3ca9f1822c",
+          "sha256": "2262742c72560b15195f057584edf367088c2962ef97de0553146fb817b5192b",
           "patches": [
             {
               "id": "ling-embedded-state-home-v1",
-              "sha256": "4118ad773e5dd544da2e91ce3ac2959494a23630388546ebb230bdb2c00d9851"
+              "sha256": "e9e4a67e2e3dad9e82f66ea510339873793f0a71af2b1f2e8c098af1ffd6d1e2"
             },
             {
               "id": "ling-managed-readiness-v1",
@@ -55,11 +56,11 @@
             },
             {
               "id": "ling-managed-lifetime-v1",
-              "sha256": "dc85b2089da4a943521dbb1a8f866274a02ee839714c3d491e0f841efa3094a5"
+              "sha256": "1acbf3991728d683172d1431f17118cf08a38bdeda159e211ee20a2de3bdc6a1"
             },
             {
               "id": "ling-windows-capability-errors-v1",
-              "sha256": "2184241e1612f411f6d4db7a9edcf451fe8d85298c0130de2c71cc4cabc945e8"
+              "sha256": "bcffdd976ee34f4c82130e03c87677605d9c44f680423dd7f1d6ece2f76475e3"
             },
             {
               "id": "ling-provider-input-fence-v1",
@@ -81,6 +82,7 @@
             "libs/cua-driver/rust/crates/cua-driver/src/telemetry.rs",
             "libs/cua-driver/rust/crates/cua-driver/src/version_check.rs",
             "libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs",
+            "libs/cua-driver/rust/crates/cua-driver/tests/protocol_media_test.rs",
             "libs/cua-driver/rust/crates/pip-preview/src/lib.rs",
             "libs/cua-driver/rust/crates/platform-macos/src/tools/mod.rs",
             "libs/cua-driver/rust/crates/platform-macos/src/tools/set_config.rs",
@@ -98,7 +100,7 @@
             "libs/cua-driver/rust/crates/platform-windows/src/tools/impl_.rs"
           ]
         },
-        "binarySha256BeforeSigning": "44b0eecbf60ffc8d01350a85347f77febc84f71778d2eabe465f161cb328db30"
+        "binarySha256BeforeSigning": "8f09744c2755bfc08121b862bc90b17441ba4d52f629f1204bfed7179fd2e3f7"
       },
       "binary": {
         "architectures": [
@@ -168,6 +170,174 @@
         "embeddedHealthSkipChecks": [
           "bundle_identity"
         ]
+      }
+    },
+    "win32X64": {
+      "schemaVersion": 1,
+      "componentId": "cua-driver-win32-x64",
+      "integrationMode": "embedded-stdio",
+      "distributionRevision": "ling.1",
+      "productVersionLabel": "0.8.3 (Ling build 1)",
+      "referenceReleaseArtifact": {
+        "filename": "cua-driver-rs-0.8.3-windows-x86_64.zip",
+        "sizeBytes": 10585087,
+        "sha256": "6acdc84b98629fcd0be2368cc16565c18d5f21d9dedd4e10fdb6f58547fce9d0",
+        "binaries": {
+          "cua-driver.exe": {
+            "sha256": "3cc33572defac29e23bc07e211c20245da9f6ebe8e6481f865b31534b1de8cee"
+          },
+          "cua-driver-uia.exe": {
+            "sha256": "1b35a27d41008507d66f819248751b9e79a15c9e6e03390c56749c6fe5daca1c"
+          }
+        },
+        "authenticodeStatus": "unsigned-reference"
+      },
+      "sourceBuild": {
+        "cargoLockSha256": "098b0527c35def4fdd1d08e5dd3d1b0d5f5dda9a04b1888ec1bf15b52311c51b",
+        "rustcVersion": "1.97.1",
+        "cargoVersion": "1.97.1",
+        "windowsSdkVersion": "10.0.26100.0",
+        "msvcToolsetVersion": "14.44.35207",
+        "target": "x86_64-pc-windows-msvc",
+        "patchSet": {
+          "id": "ling-managed-embedded-v1",
+          "sha256": "2262742c72560b15195f057584edf367088c2962ef97de0553146fb817b5192b",
+          "patches": [
+            {
+              "id": "ling-embedded-state-home-v1",
+              "sha256": "e9e4a67e2e3dad9e82f66ea510339873793f0a71af2b1f2e8c098af1ffd6d1e2"
+            },
+            {
+              "id": "ling-managed-readiness-v1",
+              "sha256": "38087c8c36f44bd1f9680fb052e6a50c44d0519f0977652dea21f3ee0bc30e34"
+            },
+            {
+              "id": "ling-managed-lifetime-v1",
+              "sha256": "1acbf3991728d683172d1431f17118cf08a38bdeda159e211ee20a2de3bdc6a1"
+            },
+            {
+              "id": "ling-windows-capability-errors-v1",
+              "sha256": "bcffdd976ee34f4c82130e03c87677605d9c44f680423dd7f1d6ece2f76475e3"
+            },
+            {
+              "id": "ling-provider-input-fence-v1",
+              "sha256": "f741cab1c74c86b2e2f983d9e867d7c555c6f96696b67ac091e340daa076d2db"
+            }
+          ],
+          "touchedPaths": [
+            "libs/cua-driver/rust/crates/cua-driver-core/Cargo.toml",
+            "libs/cua-driver/rust/crates/cua-driver-core/src/input_fence.rs",
+            "libs/cua-driver/rust/crates/cua-driver-core/src/lib.rs",
+            "libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed.rs",
+            "libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed_readiness.rs",
+            "libs/cua-driver/rust/crates/cua-driver-core/src/protocol.rs",
+            "libs/cua-driver/rust/crates/cua-driver-core/src/server.rs",
+            "libs/cua-driver/rust/crates/cua-driver/src/cli.rs",
+            "libs/cua-driver/rust/crates/cua-driver/src/ling_managed_lifetime.rs",
+            "libs/cua-driver/rust/crates/cua-driver/src/main.rs",
+            "libs/cua-driver/rust/crates/cua-driver/src/serve.rs",
+            "libs/cua-driver/rust/crates/cua-driver/src/telemetry.rs",
+            "libs/cua-driver/rust/crates/cua-driver/src/version_check.rs",
+            "libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs",
+            "libs/cua-driver/rust/crates/cua-driver/tests/protocol_media_test.rs",
+            "libs/cua-driver/rust/crates/pip-preview/src/lib.rs",
+            "libs/cua-driver/rust/crates/platform-macos/src/tools/mod.rs",
+            "libs/cua-driver/rust/crates/platform-macos/src/tools/set_config.rs",
+            "libs/cua-driver/rust/crates/platform-windows/Cargo.toml",
+            "libs/cua-driver/rust/crates/platform-windows/src/health_report.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/input/delivery.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/input/inject.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/input/keyboard.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/input/mod.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/input/mouse.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/lib.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/ling_managed_capability.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/managed_lifetime.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/managed_readiness.rs",
+            "libs/cua-driver/rust/crates/platform-windows/src/tools/impl_.rs"
+          ]
+        },
+        "binariesSha256BeforeSigning": {
+          "main": "3316e908a0a1faa987d36d4189b9bfef0ed4fa34f3c99ee9cfd3c48a6faa9e50",
+          "uiaAuditArtifact": "16bba41857d1d705115e1773b1e716cf1f2700b431f2bc7e28a0dd6bae7da4bc"
+        }
+      },
+      "binary": {
+        "architecture": "x86_64",
+        "expectedUpstreamVersion": "0.8.3",
+        "lingBuild": 1,
+        "mainRelativePath": "payload/ling-cua-driver.exe",
+        "providerSealRelativePath": "payload/provider-seal.json",
+        "mainManifestCanonicalSha256": "4d4e6bacb9bb0038e3e6b17ac3654f198ff1822ab799f4f98239f9c35fd91193",
+        "integrityCatalogRelativePathBySigningTier": {
+          "unsigned_dev": null,
+          "test_signed_internal": "provider-integrity.cat",
+          "production_signed": "provider-integrity.cat"
+        },
+        "packagedFilesBySigningTier": {
+          "unsigned_dev": [
+            "payload/ling-cua-driver.exe",
+            "payload/provider-seal.json"
+          ],
+          "test_signed_internal": [
+            "provider-integrity.cat",
+            "payload/ling-cua-driver.exe",
+            "payload/provider-seal.json"
+          ],
+          "production_signed": [
+            "provider-integrity.cat",
+            "payload/ling-cua-driver.exe",
+            "payload/provider-seal.json"
+          ]
+        },
+        "uiaAuditArtifact": {
+          "packaged": false,
+          "relativeBuildOutput": "cua-driver-uia.exe",
+          "manifestCanonicalSha256": "ade4fdc1fa2c2227deef697e3867f0ca1e20a478fcc1564103562f1683161ed7",
+          "requestedExecutionLevel": "asInvoker",
+          "uiAccess": true
+        }
+      },
+      "runtime": {
+        "args": [
+          "mcp",
+          "--embedded",
+          "--host-bundle-id",
+          "com.lingstack.desktop"
+        ],
+        "requiredSession": "interactive-user",
+        "rejectSessionZero": true,
+        "stateHomeEnvironmentVariable": "CUA_DRIVER_STATE_HOME",
+        "inputFencePortEnvironmentVariable": "CUA_DRIVER_INPUT_FENCE_PORT",
+        "inputFenceTokenEnvironmentVariable": "CUA_DRIVER_INPUT_FENCE_TOKEN",
+        "inputEpochEnvironmentVariable": "CUA_DRIVER_INPUT_EPOCH",
+        "inputFenceProtocolVersion": 1,
+        "inputFenceAdmission": "mutating_tool_call_v1",
+        "stateSchemaVersion": 1,
+        "telemetryEnabled": false,
+        "startupUpdateCheckEnabled": false,
+        "managedUpdaterToolsAllowed": false,
+        "defaultIntegrityCoverage": "standard",
+        "managedReadinessMethod": "ling/managed_readiness",
+        "managedReadinessChangedNotification": "ling/managed_readiness_changed",
+        "childInstanceNonceEnvironmentVariable": "CUA_DRIVER_CHILD_INSTANCE_NONCE",
+        "leaseGenerationEnvironmentVariable": "CUA_DRIVER_LEASE_GENERATION",
+        "readinessHeartbeatMs": 1000,
+        "requiredHostIntegrityLevel": "medium",
+        "requiredProviderIntegrityLevel": "medium",
+        "killOnJobCloseRequired": true,
+        "limitations": [
+          "elevated_pixel_input",
+          "uwp_send_input"
+        ],
+        "uiaHelperActivation": "not-packaged-until-secure-path-contract"
+      },
+      "compatibility": {
+        "mcpClientSdk": "@modelcontextprotocol/sdk@1.29.0",
+        "clientInitializeProtocolVersion": "2025-11-25",
+        "serverInitializeProtocolVersion": "2025-06-18",
+        "healthSchemaVersion": "1",
+        "toolsListSha256": "e71ee2e4a7d297cb8d92270f99a39941c3cc5316d0d0db8c8733b715b6dc1cd7"
       }
     }
   }

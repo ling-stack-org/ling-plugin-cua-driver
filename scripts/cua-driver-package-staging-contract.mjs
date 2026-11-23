@@ -10,12 +10,12 @@ export const CUA_DRIVER_PACKAGE_DESTINATION =
 // Independent review anchor for the checked-in provider-lock.json. Opening a
 // platform requires updating both the lock and this digest in the same change.
 export const CUA_DRIVER_COMMITTED_LOCK_SHA256 =
-  "0fae16f8357a81986ec915a544e0aea3bbbd2f8ab56aec22d770478b03146a98";
+  "3c61056f81b8b453b0c063239c984cf2865a00c8f2540929e67706da1674fe34";
 // The non-promoting source-build contract is a second independent input to
 // promotion. A custom --resource-root must carry these exact reviewed bytes;
 // self-consistent replacement inputs cannot authorize their own lock record.
 export const CUA_DRIVER_COMMITTED_SOURCE_BUILD_INPUTS_SHA256 =
-  "dbdd1cb0b993f025b4a63e7e2adb5a635d9da56dd5da3abeff46c9fd17f4483b";
+  "85d227fb3a15106b47c7cfb03dc76a015593cfd1526f6bb3243c8f7a448b9111";
 
 const SUPPORTED_PLATFORMS = new Set(["darwin", "win32-x64"]);
 

@@ -53,23 +53,21 @@ export async function verifyToolchain(platform, lock) {
   const programFilesX86 = process.env["ProgramFiles(x86)"];
   assert(programFilesX86, "ProgramFiles(x86) is not set");
   const vswhere = join(programFilesX86, "Microsoft Visual Studio", "Installer", "vswhere.exe");
-  const installationPath = await runText(vswhere, [
-    "-latest",
+  const installations = JSON.parse(await runText(vswhere, [
     "-products",
     "*",
     "-requires",
     "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-    "-property",
-    "installationPath",
-  ]);
-  assert(installationPath.length > 0, "Visual Studio installation was not found");
-  const catalog = JSON.parse(
-    await runText(vswhere, ["-path", installationPath, "-format", "json", "-utf8"]),
-  )[0]?.catalog;
+    "-format",
+    "json",
+    "-utf8",
+  ]));
+  const installation = installations.find((item) => item.installationVersion === pin.visualStudioVersion);
   assert(
-    catalog?.productDisplayVersion === pin.visualStudioVersion,
-    `Visual Studio version mismatch: ${catalog?.productDisplayVersion ?? "missing"}`,
+    installation && typeof installation.installationPath === "string" && installation.installationPath.length > 0,
+    `Visual Studio build ${pin.visualStudioVersion} not found: ${installations.map((item) => item.installationVersion).join(", ") || "missing"}`,
   );
+  const installationPath = installation.installationPath;
   const toolsetFile = join(
     installationPath,
     "VC",
@@ -95,6 +93,7 @@ export async function verifyToolchain(platform, lock) {
         "/c",
         `call "${vsDevCmd}" -no_logo -arch=x64 -host_arch=x64 -vcvars_ver=${vcvarsVersion} -winsdk=${pin.windowsSdkVersion} && set`,
       ],
+      { windowsVerbatimArguments: true },
     ),
   );
   const environment = mergeEnvironment(process.env, developerEnvironment, true);
@@ -132,11 +131,18 @@ export async function verifyToolchain(platform, lock) {
   assertPathInside(clPath, expectedToolsetRoot, "cl.exe");
   assertPathInside(linkPath, expectedToolsetRoot, "link.exe");
   assertPathInside(rcPath, expectedSdkBin, "rc.exe");
+  const compilerProductVersion = await runText("powershell.exe", [
+    "-NoProfile", "-NonInteractive", "-Command",
+    "(Get-Item -LiteralPath $env:LING_CUA_CL_VERSION_PATH).VersionInfo.ProductVersion",
+  ], { env: { ...environment, LING_CUA_CL_VERSION_PATH: clPath } });
+  assert(compilerProductVersion === pin.msvcCompilerProductVersion,
+    `MSVC compiler product version mismatch: ${compilerProductVersion}`);
   return {
     env: environment,
     evidence: {
       visualStudioVersion: pin.visualStudioVersion,
       msvcToolsetVersion: pin.msvcToolsetVersion,
+      msvcCompilerProductVersion: compilerProductVersion,
       windowsSdkVersion: pin.windowsSdkVersion,
       installationPath,
       clPath,

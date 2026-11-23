@@ -456,7 +456,9 @@ function verifySourceBuildInputs(value) {
   assertSha(value.patchSet.sha256, "source-build patch digest");
   assertExactKeys(value.toolchain, ["cargoVersion", "darwin", "rustToolchainFile", "rustcVersion", "win32X64"], "source-build toolchain");
   assertExactKeys(value.toolchain.darwin, ["deploymentTarget", "developerDir", "macOSSDKVersion", "postLinkIdentityNormalization", "swiftArchiveNormalization", "targets", "xcodeBuildVersion", "xcodeVersion"], "darwin toolchain");
-  assertExactKeys(value.toolchain.win32X64, ["msvcToolsetVersion", "target", "visualStudioVersion", "windowsSdkVersion"], "Windows toolchain");
+  assertExactKeys(value.toolchain.win32X64,
+    ["msvcCompilerProductVersion", "msvcToolsetVersion", "target", "visualStudioVersion", "windowsSdkVersion"],
+    "Windows toolchain");
   assert(value.toolchain.rustcVersion === "1.97.1" && value.toolchain.cargoVersion === "1.97.1", "Rust toolchain version changed");
   assert(value.toolchain.darwin.developerDir === "/Applications/Xcode.app/Contents/Developer", "Xcode developer directory changed");
   assert(value.toolchain.darwin.xcodeVersion === "26.6" && value.toolchain.darwin.xcodeBuildVersion === "17F113", "Xcode pin changed");
@@ -488,7 +490,8 @@ function verifySourceBuildInputs(value) {
     codesignPath: "/usr/bin/codesign",
   }, "darwin post-link identity normalization");
   assert(value.toolchain.win32X64.visualStudioVersion === "17.14.37502.11", "Visual Studio pin changed");
-  assert(value.toolchain.win32X64.msvcToolsetVersion === "14.44.35211", "MSVC toolset pin changed");
+  assert(value.toolchain.win32X64.msvcToolsetVersion === "14.44.35207", "MSVC toolset pin changed");
+  assert(value.toolchain.win32X64.msvcCompilerProductVersion === "14.44.35228.0", "MSVC compiler product pin changed");
   assert(value.toolchain.win32X64.windowsSdkVersion === "10.0.26100.0", "Windows SDK pin changed");
   assert(value.toolchain.win32X64.target === "x86_64-pc-windows-msvc", "Windows Rust target changed");
   assertDeepEqual(value.sourceBuildPlatforms, ["darwin", "win32-x64"], "source-build platforms");

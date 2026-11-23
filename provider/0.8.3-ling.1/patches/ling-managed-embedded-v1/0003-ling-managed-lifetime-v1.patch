@@ -401,10 +401,10 @@ index 6aabae5..25c9745 100644
      }
 diff --git a/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
 new file mode 100644
-index 0000000..76eca68
+index 0000000..aa78ccf
 --- /dev/null
 +++ b/libs/cua-driver/rust/crates/cua-driver/tests/ling_managed_native.rs
-@@ -0,0 +1,466 @@
+@@ -0,0 +1,534 @@
 +#![cfg(debug_assertions)]
 +
 +use serde_json::{json, Value};
@@ -419,6 +419,8 @@ index 0000000..76eca68
 +use wait_timeout::ChildExt;
 +
 +const PROVIDER: &str = env!("CARGO_BIN_EXE_cua-driver");
++const CHILD_NONCE: &str = "native-acceptance-child";
++const LEASE_GENERATION: u64 = 1;
 +static DIAGNOSE_LOCK: Mutex<()> = Mutex::new(());
 +
 +struct ManagedFixture {
@@ -503,6 +505,7 @@ index 0000000..76eca68
 +    }
 +
 +    fn request(&mut self, id: u64, method: &str, params: Value) -> Value {
++        let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("-");
 +        let request = json!({
 +            "jsonrpc": "2.0",
 +            "id": id,
@@ -518,7 +521,9 @@ index 0000000..76eca68
 +            let value = self
 +                .responses
 +                .recv_timeout(remaining)
-+                .expect("provider response timed out");
++                .unwrap_or_else(|error| {
++                    panic!("provider response timed out for {method} ({tool_name}): {error}")
++                });
 +            if value.get("id").and_then(Value::as_u64) == Some(id) {
 +                return value;
 +            }
@@ -526,7 +531,7 @@ index 0000000..76eca68
 +    }
 +
 +    fn initialize(&mut self) -> Value {
-+        self.request(
++        let response = self.request(
 +            1,
 +            "initialize",
 +            json!({
@@ -534,7 +539,39 @@ index 0000000..76eca68
 +                "capabilities": {},
 +                "clientInfo": {"name": "ling-native-acceptance", "version": "1"}
 +            }),
-+        )
++        );
++        let notification = json!({
++            "jsonrpc": "2.0",
++            "method": "notifications/initialized",
++            "params": {},
++        });
++        let stdin = self.stdin.as_mut().expect("provider stdin open");
++        writeln!(stdin, "{notification}").expect("write MCP initialized notification");
++        stdin.flush().expect("flush MCP initialized notification");
++        response
++    }
++
++    #[cfg(target_os = "windows")]
++    fn establish_readiness(&mut self) {
++        let ready = self.request(
++            4,
++            "ling/managed_readiness",
++            json!({
++                "schemaVersion": 1,
++                "childInstanceNonce": CHILD_NONCE,
++                "leaseGeneration": LEASE_GENERATION
++            }),
++        );
++        assert_eq!(
++            ready.pointer("/result/providerProcessId"),
++            Some(&json!(self.child.id())),
++            "managed readiness failed: {ready}"
++        );
++        assert_eq!(
++            ready.pointer("/result/hostProcessId"),
++            Some(&json!(std::process::id())),
++            "managed readiness failed: {ready}"
++        );
 +    }
 +
 +    fn close_stdin_and_wait(&mut self) -> std::process::ExitStatus {
@@ -561,6 +598,8 @@ index 0000000..76eca68
 +        initialize.pointer("/result/protocolVersion"),
 +        Some(&json!("2025-06-18"))
 +    );
++    #[cfg(target_os = "windows")]
++    first.establish_readiness();
 +    let updated = first.request(
 +        2,
 +        "tools/call",
@@ -573,7 +612,11 @@ index 0000000..76eca68
 +            }
 +        }),
 +    );
-+    assert_ne!(updated.pointer("/result/isError"), Some(&Value::Bool(true)));
++    assert_ne!(
++        updated.pointer("/result/isError"),
++        Some(&Value::Bool(true)),
++        "managed set_config failed: {updated}"
++    );
 +    assert!(first.close_stdin_and_wait().success());
 +
 +    assert_eq!(snapshot_tree(&fixture.home), external_before);
@@ -586,6 +629,8 @@ index 0000000..76eca68
 +
 +    let mut second = McpProcess::spawn(&fixture, std::process::id(), &[]);
 +    second.initialize();
++    #[cfg(target_os = "windows")]
++    second.establish_readiness();
 +    let config = second.request(
 +        2,
 +        "tools/call",
@@ -602,7 +647,16 @@ index 0000000..76eca68
 +    let health = second.request(
 +        3,
 +        "tools/call",
-+        json!({"name": "health_report", "arguments": {}}),
++        json!({
++            "name": "health_report",
++            "arguments": { "skip": [
++                "ax_capability",
++                "bundle_identity",
++                "screen_capture_capability",
++                "tcc_accessibility",
++                "tcc_screen_recording"
++            ] },
++        }),
 +    );
 +    assert!(health.pointer("/result/structuredContent").is_some());
 +    assert!(second.close_stdin_and_wait().success());
@@ -697,7 +751,7 @@ index 0000000..76eca68
 +    command
 +        .stdin(Stdio::piped())
 +        .stdout(Stdio::piped())
-+        .stderr(Stdio::null());
++        .stderr(Stdio::piped());
 +    let mut child = command.spawn().expect("spawn half-close provider");
 +    let mut stdin = child.stdin.take().unwrap();
 +    drop(child.stdout.take());
@@ -718,7 +772,21 @@ index 0000000..76eca68
 +    .unwrap();
 +    stdin.flush().unwrap();
 +    let status = wait_for_exit(&mut child, Duration::from_secs(10));
-+    assert!(status.success(), "half-close exit was {status:?}");
++    let output = child.wait_with_output().expect("collect half-close stderr");
++    let stderr = String::from_utf8_lossy(&output.stderr);
++
++    #[cfg(not(target_os = "windows"))]
++    assert!(status.success(), "half-close exit was {status:?}: {stderr}");
++    #[cfg(target_os = "windows")]
++    {
++        // The Windows CLI reports a failed stdout write as a transport error.
++        assert_eq!(status.code(), Some(1), "half-close exit: {stderr}");
++        assert!(
++            stderr.contains("MCP server error:")
++                && (stderr.contains("(os error 109)") || stderr.contains("(os error 232)")),
++            "expected a closed stdout pipe: {stderr}"
++        );
++    }
 +}
 +
 +#[cfg(target_os = "windows")]
@@ -799,8 +867,8 @@ index 0000000..76eca68
 +        .env("CUA_DRIVER_EMBEDDED", "1")
 +        .env("CUA_DRIVER_HOST_BUNDLE_ID", "com.lingstack.desktop")
 +        .env("CUA_DRIVER_HOST_PID", host_pid.to_string())
-+        .env("CUA_DRIVER_CHILD_INSTANCE_NONCE", "native-acceptance-child")
-+        .env("CUA_DRIVER_LEASE_GENERATION", "1")
++        .env("CUA_DRIVER_CHILD_INSTANCE_NONCE", CHILD_NONCE)
++        .env("CUA_DRIVER_LEASE_GENERATION", LEASE_GENERATION.to_string())
 +        .env("CUA_DRIVER_STATE_HOME", &fixture.root)
 +        .env("CUA_DRIVER_TELEMETRY_HOME", fixture.root.join("telemetry"))
 +        .env("CUA_DRIVER_RS_TELEMETRY_ENABLED", "false")

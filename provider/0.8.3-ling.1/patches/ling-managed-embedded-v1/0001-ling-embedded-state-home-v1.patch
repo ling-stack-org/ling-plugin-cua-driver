@@ -29,10 +29,10 @@ index 21ffab2..7a78c4a 100644
  pub mod policy;
 diff --git a/libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed.rs b/libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed.rs
 new file mode 100644
-index 0000000..a11296f
+index 0000000..f33547c
 --- /dev/null
 +++ b/libs/cua-driver/rust/crates/cua-driver-core/src/ling_managed.rs
-@@ -0,0 +1,1411 @@
+@@ -0,0 +1,1404 @@
 +//! Ling-owned managed-embedding environment and capability-root state access.
 +//!
 +//! Managed mode intentionally keeps the user's real HOME/USERPROFILE intact.
@@ -789,12 +789,12 @@ index 0000000..a11296f
 +        TOKEN_QUERY, TOKEN_USER,
 +    };
 +    use windows::Win32::Storage::FileSystem::{
-+        CreateFileW, FileAttributeTagInfo, GetFileInformationByHandleEx, MoveFileExW, ReplaceFileW,
-+        CREATE_NEW, FILE_ALL_ACCESS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
++        CreateFileW, FileAttributeTagInfo, GetFileInformationByHandleEx, MoveFileExW, CREATE_NEW,
++        FILE_ALL_ACCESS, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL,
 +        FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_FLAG_BACKUP_SEMANTICS,
 +        FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_DELETE,
-+        FILE_SHARE_READ, FILE_SHARE_WRITE, MOVEFILE_WRITE_THROUGH, OPEN_EXISTING,
-+        REPLACEFILE_WRITE_THROUGH, WRITE_DAC,
++        FILE_SHARE_READ, FILE_SHARE_WRITE, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
++        OPEN_EXISTING, WRITE_DAC,
 +    };
 +    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 +
@@ -1222,28 +1222,22 @@ index 0000000..a11296f
 +    fn atomic_replace(temporary: &Path, destination: &Path) -> Result<(), String> {
 +        let temporary_wide = wide(temporary.as_os_str());
 +        let destination_wide = wide(destination.as_os_str());
-+        if path_entry_exists(destination)? {
-+            unsafe {
-+                ReplaceFileW(
-+                    PCWSTR(destination_wide.as_ptr()),
-+                    PCWSTR(temporary_wide.as_ptr()),
-+                    PCWSTR::null(),
-+                    REPLACEFILE_WRITE_THROUGH,
-+                    None,
-+                    None,
-+                )
-+            }
-+            .map_err(|error| format!("failed to atomically replace managed file: {error}"))
++        // The flushed temporary file still has a write-exclusive handle. A
++        // same-directory move preserves its validated private DACL and can
++        // publish it without reopening it for write access.
++        let flags = if path_entry_exists(destination)? {
++            MOVEFILE_WRITE_THROUGH | MOVEFILE_REPLACE_EXISTING
 +        } else {
-+            unsafe {
-+                MoveFileExW(
-+                    PCWSTR(temporary_wide.as_ptr()),
-+                    PCWSTR(destination_wide.as_ptr()),
-+                    MOVEFILE_WRITE_THROUGH,
-+                )
-+            }
-+            .map_err(|error| format!("failed to atomically install managed file: {error}"))
++            MOVEFILE_WRITE_THROUGH
++        };
++        unsafe {
++            MoveFileExW(
++                PCWSTR(temporary_wide.as_ptr()),
++                PCWSTR(destination_wide.as_ptr()),
++                flags,
++            )
 +        }
++        .map_err(|error| format!("failed to atomically publish managed file: {error}"))
 +    }
 +
 +    fn wide(value: &std::ffi::OsStr) -> Vec<u16> {
@@ -1431,13 +1425,12 @@ index 0000000..a11296f
 +        std::fs::create_dir(&outside).unwrap();
 +        let junction = good.join("version-check");
 +        std::fs::remove_dir(&junction).unwrap();
-+        let command = format!(
-+            "mklink /J \"{}\" \"{}\"",
-+            junction.display(),
-+            outside.display()
-+        );
++        // mklink resolves the relative fixture paths on the local volume.
 +        let status = std::process::Command::new("cmd.exe")
-+            .args(["/d", "/s", "/c", &command])
++            .current_dir(temporary.path())
++            .args(["/d", "/c", "mklink", "/J"])
++            .arg(junction.strip_prefix(&base).unwrap())
++            .arg(outside.strip_prefix(&base).unwrap())
 +            .status()
 +            .unwrap();
 +        assert!(status.success(), "failed to create junction fixture");

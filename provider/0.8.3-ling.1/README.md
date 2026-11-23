@@ -55,9 +55,13 @@ fabricated provider seal. A second same-platform output must pass
 `--compare-a/--compare-b` before a later signing/promotion slice may update the
 V2 platform lock.
 
-After both native candidates pass independently, upload the A/B output. A dependent job on
-the same operating system downloads that artifact into a fresh root and generates the
-review-only proposal:
+To prepare a review-only platform record from a successful Provider native build run,
+dispatch the same workflow for that platform with the run ID in `candidate_run_id`.
+The job downloads the two retained artifacts, verifies them again on the native host
+and attaches the proposal and source run metadata as a workflow artifact.
+
+For independent builds outside GitHub Actions, download the two outputs to fresh directories
+on the native host and use the same promotion command:
 
 ```bash
 node scripts/promote-cua-driver-source-build.mjs \

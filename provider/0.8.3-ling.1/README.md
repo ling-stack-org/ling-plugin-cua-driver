@@ -55,17 +55,18 @@ fabricated provider seal. A second same-platform output must pass
 `--compare-a/--compare-b` before a later signing/promotion slice may update the
 V2 platform lock.
 
-To prepare a review-only platform record from a successful Provider native build run,
-dispatch the same workflow for that platform with the run ID in `candidate_run_id`.
-The job downloads the two retained artifacts, verifies them again on the native host
-and attaches the proposal and source run metadata as a workflow artifact.
+For a platform that has no record in `provider-lock.json`, dispatch the Provider native
+build workflow with the successful A/B run ID in `candidate_run_id`. The job downloads
+the two retained artifacts by ID, verifies them again on the native host and attaches
+the proposal and source run metadata as a workflow artifact.
 
 For independent builds outside GitHub Actions, download the two outputs to fresh directories
-on the native host and use the same promotion command:
+on the native host and use the same promotion command for an unrecorded platform.
+For Windows, run it from the locked Visual Studio and Windows SDK environment.
 
 ```bash
 node scripts/promote-cua-driver-source-build.mjs \
-  --platform darwin \
+  --platform win32-x64 \
   --candidate-a "$RUNNER_TEMP/ling-cua-driver-download/a/output" \
   --candidate-b "$RUNNER_TEMP/ling-cua-driver-download/b/output" \
   --output-dir "$RUNNER_TEMP/ling-cua-driver-download/promotion"
@@ -79,6 +80,9 @@ provenance, commit the lock, mutate this non-promoting source-input file, copy p
 binaries, or claim final signing identity. After the proposal and independent lock anchor
 are reviewed and committed, native candidates must be rebuilt again so their attestations
 bind the new committed lock before package staging.
+
+Refreshing an existing platform record requires an independently reviewed update of the
+source inputs and lock. The promotion command rejects targets that already have a record.
 
 The CLI captures the canonical output-parent native identity before either candidate is
 executed. It later requires that same identity under the native parent lease, writes a

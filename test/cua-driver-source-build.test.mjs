@@ -61,6 +61,7 @@ import {
   verifyRuntimeProbe,
 } from "../scripts/verify-cua-driver-source-build.mjs";
 import {
+  checkCommittedCuaDriverPackageAuthorization,
   resolveCuaDriverPackageAuthorization,
 } from "../scripts/check-cua-driver-package-authorization.mjs";
 
@@ -89,13 +90,15 @@ test("provider lock is the exact V2 contract and remains fail-closed", async () 
     "tree",
     "version",
   ]);
-  assert.deepEqual(lock.enabledPlatforms, ["darwin"]);
-  assert.deepEqual(Object.keys(lock.platforms), ["darwin"]);
+  assert.deepEqual(lock.enabledPlatforms, ["darwin", "win32-x64"]);
+  assert.deepEqual(Object.keys(lock.platforms), ["darwin", "win32X64"]);
   assert.equal(lock.platforms.darwin.componentId, "cua-driver-darwin");
   assert.equal(
     lock.platforms.darwin.sourceBuild.binarySha256BeforeSigning,
-    "44b0eecbf60ffc8d01350a85347f77febc84f71778d2eabe465f161cb328db30",
+    "8f09744c2755bfc08121b862bc90b17441ba4d52f629f1204bfed7179fd2e3f7",
   );
+  assert.equal(lock.platforms.win32X64.componentId, "cua-driver-win32-x64");
+  assert.equal(lock.platforms.win32X64.binary.uiaAuditArtifact.packaged, false);
   const inputs = JSON.parse(await readFile(join(PROVIDER_RESOURCE_ROOT, "source-build-inputs.json"), "utf8"));
   assert.deepEqual(Object.keys(inputs).sort(), [
     "compatibility",
@@ -149,17 +152,17 @@ test("package authorization follows only the independently anchored committed lo
   });
   assert.equal(closed.authorized, false);
 
-  assert.equal(resolveCuaDriverPackageAuthorization({
-    actualLockSha256: digest,
-    expectedLockSha256: digest,
-    platform: "darwin",
-    providerLock,
-  }).authorized, true);
+  assert.equal((await checkCommittedCuaDriverPackageAuthorization("darwin")).authorized, true);
+  assert.equal((await checkCommittedCuaDriverPackageAuthorization("win32-x64")).authorized, true);
   assert.equal(resolveCuaDriverPackageAuthorization({
     actualLockSha256: digest,
     expectedLockSha256: digest,
     platform: "win32-x64",
-    providerLock,
+    providerLock: {
+      ...providerLock,
+      enabledPlatforms: ["darwin"],
+      platforms: { darwin: providerLock.platforms.darwin },
+    },
   }).authorized, false);
   assert.throws(
     () => resolveCuaDriverPackageAuthorization({

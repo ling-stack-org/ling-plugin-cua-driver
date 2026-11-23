@@ -473,7 +473,7 @@ function verifySourceBuildInputs(value) {
       cleanPackage: "cua-driver",
       targets: {
         "aarch64-apple-darwin": {
-          expectedSourceSha256: "e79f3c696c623aaa18074f44d668416018525c8b1ffb8d262bf1fd77e1ade99a",
+          expectedSourceSha256: "0edf30c01f3bde38e808c38df1d1ad521e0618bff913abf1d4baf80eef08a861",
           maxAttempts: 32,
         },
       },

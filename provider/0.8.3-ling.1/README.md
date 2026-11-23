@@ -3,8 +3,8 @@
 This directory locks the source inputs for `0.8.3 (Ling build 1)`. It contains
 no provider executable and is therefore not a shipped provider artifact.
 
-The committed `provider-lock.json` authorizes the reviewed Darwin source build.
-Its Windows platform entry remains closed. `source-build-inputs.json` retains
+The committed `provider-lock.json` records the reviewed macOS arm64 and Windows
+x64 source builds. `source-build-inputs.json` retains
 `packagingGate.eligible=false` because the input manifest has no authority to
 promote its output. The build verifies the exact upstream tag, commit, tree,
 Cargo lock, license, patch hashes and native toolchain before writing output.

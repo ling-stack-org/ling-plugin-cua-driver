@@ -12,4 +12,6 @@ The release runtime probe verifies its managed state directory under the native 
 
 The Windows build validates that the owned probe can run at Medium integrity before compiling the provider. The build process prepares the state root and passes its native directory identities to the probe. On an elevated runner the native launcher restricts the probe to the same user and interactive session at Medium integrity. The probe reopens the state root under the native parent lease and checks the actual integrity of both the host and provider.
 
+The native workflow validates each candidate attestation and repeats the executable version check in an owned process. On Windows this uses the locked compiler environment. The compare job checks the candidate payload digests across the two runners.
+
 A reviewed, signed runtime tree preserves the Ling resource layout under `runtime/providers/cua-driver/<distribution-revision>/`. Include the lock, license and notices, the native binary, the provider seal, and the Windows integrity catalog when applicable. Publish the platform archive with its provenance and submit its immutable release URL to the [official catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).

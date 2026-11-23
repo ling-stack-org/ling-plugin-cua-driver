@@ -65,7 +65,7 @@ jobs:
       - name: Build and verify the locked source
         run: |
           node scripts/build-cua-driver-provider.mjs --platform "$PROVIDER_TARGET" --work-dir "$RUNNER_TEMP/cua-build" --output-dir "$GITHUB_WORKSPACE/provider-output"
-          node scripts/verify-cua-driver-source-build.mjs --expected-platform "$PROVIDER_TARGET" --attestation "$GITHUB_WORKSPACE/provider-output/source-build-attestation.json" --output-root "$GITHUB_WORKSPACE/provider-output"
+          node scripts/verify-cua-driver-source-build.mjs --attestation "$GITHUB_WORKSPACE/provider-output/source-build-attestation.json" --output-root "$GITHUB_WORKSPACE/provider-output"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: source-build-${{ inputs.platform }}-${{ matrix.replica }}

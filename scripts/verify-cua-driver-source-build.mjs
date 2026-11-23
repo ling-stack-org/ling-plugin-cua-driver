@@ -10,6 +10,7 @@ import {
   verifyProviderInputs,
 } from "./cua-driver-source-build-lib.mjs";
 import { runOwnedProcess } from "./cua-driver-owned-process.mjs";
+import { verifyToolchain } from "./cua-driver-source-build-toolchain.mjs";
 import {
   inspectArm64MachO,
   inspectWindowsPe,
@@ -150,6 +151,10 @@ if (args["attestation"]) {
   });
   if (JSON.stringify(attestation.checks?.binaryIdentity) !== JSON.stringify(observedBinaryIdentity)) fail("attestation binary identity mismatch");
   if (JSON.stringify(promotion.sourceBuild?.binaryIdentity) !== JSON.stringify(observedBinaryIdentity)) fail("promotion binary identity mismatch");
+  if (attestation.platform === "win32-x64" && !stagingExpectation) {
+    const { env } = await verifyToolchain(attestation.platform, verified.lock);
+    Object.assign(process.env, env);
+  }
   const observedVersion = await resolveObservedProviderVersion({
     attestationVersionOutput: attestation.checks?.versionOutput,
     executablePath: resolve(outputRoot, mainRelativePath),

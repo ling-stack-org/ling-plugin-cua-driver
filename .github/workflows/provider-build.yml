@@ -79,12 +79,13 @@ jobs:
           node-version: 22.22.1
       - name: Bind the candidate run and artifact identities
         if: inputs.candidate_run_id != ''
+        id: candidate_artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           node --input-type=module <<'NODE'
           import { execFileSync } from "node:child_process";
-          import { mkdirSync, writeFileSync } from "node:fs";
+          import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
           import { join } from "node:path";
 
           const { CANDIDATE_RUN_ID: id, GITHUB_REPOSITORY: repository, GITHUB_REPOSITORY_ID: repositoryId,
@@ -101,7 +102,7 @@ jobs:
           const candidates = ["a", "b"].map((replica) => {
             const matches = artifacts.filter(({ name }) => name === `source-build-${platform}-${replica}`);
             const [artifact] = matches;
-            if (matches.length !== 1 || artifact.expired
+            if (matches.length !== 1 || artifact.expired || !Number.isSafeInteger(artifact.id)
               || !/^sha256:[a-f0-9]{64}$/u.test(artifact.digest ?? "")
               || artifact.workflow_run?.head_sha !== run.head_sha) {
               throw new Error(`Expected one retained ${platform} artifact for replica ${replica}.`);
@@ -113,11 +114,13 @@ jobs:
           writeFileSync(join(root, "candidate-run.json"), JSON.stringify({
             repository, runId: run.id, headSha: run.head_sha, url: run.html_url, platform, candidates,
           }, null, 2) + "\n", { flag: "wx" });
+          appendFileSync(process.env.GITHUB_OUTPUT, `artifact_ids=${candidates.map(({ id }) => id).join(",")}\n`);
           NODE
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           path: candidates
-          pattern: source-build-${{ inputs.platform }}-*
+          artifact-ids: ${{ steps.candidate_artifacts.outputs.artifact_ids }}
+          pattern: ${{ inputs.candidate_run_id == '' && format('source-build-{0}-*', inputs.platform) || '' }}
           run-id: ${{ inputs.candidate_run_id || github.run_id }}
           github-token: ${{ github.token }}
       - name: Compare independent builds

@@ -18,6 +18,14 @@ The Windows build validates that the owned probe can run at Medium integrity bef
 
 The native workflow validates each candidate attestation and repeats the executable version check in an owned process. On Windows this uses the locked compiler environment. The compare job checks the candidate payload digests across the two runners.
 
+## Prepare the signing inputs
+
+Run the [Provider native build workflow](https://github.com/ling-stack-org/ling-plugin-cua-driver/actions/workflows/provider-build.yml) for the target with `prepare_signing=true`. Supply `candidate_run_id` to reuse a successful A/B run from this repository. With an empty run ID the workflow builds a fresh pair. The workflow requires the two outputs to match the committed platform lock before staging the executable, lock, license and notices.
+
+Download `provider-signing-inputs-<platform>` from the run. Check the SHA-256 of `provider-revision.tar.gz` against `signing-inputs.json` and extract it in the protected signing environment. The tar preserves the macOS executable mode and provides the `0.8.3-ling.1` revision directory. Sign the executable and create its provider seal there. Keep the signing-input receipt with the platform signing evidence.
+
+## Package the signed provider
+
 Build the release archive on the corresponding target after approving the source build and signing its native runtime. The signed revision directory contains the promoted lock, license, notices, platform executable and provider seal. Windows also includes the signed integrity catalog. The packaging command verifies the promoted lock, sealed digests and the platform signatures before archiving the selected files.
 
 ```sh

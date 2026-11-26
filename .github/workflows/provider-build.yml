@@ -10,8 +10,12 @@ on:
         options: [darwin, win32-x64]
       candidate_run_id:
         type: string
-        description: Successful A/B run to reverify for a review-only platform lock proposal
+        description: Successful A/B run to reuse for a lock proposal or signing inputs
         required: false
+      prepare_signing:
+        type: boolean
+        description: Verify both builds and stage the inputs for platform signing
+        default: false
 
 permissions:
   contents: read
@@ -126,17 +130,17 @@ jobs:
       - name: Compare independent builds
         run: |
           node scripts/verify-cua-driver-source-build.mjs --compare-a "$GITHUB_WORKSPACE/candidates/source-build-$PROVIDER_TARGET-a" --compare-b "$GITHUB_WORKSPACE/candidates/source-build-$PROVIDER_TARGET-b"
-      - name: Prepare the review verification toolchain
-        if: inputs.candidate_run_id != '' && inputs.platform == 'win32-x64'
+      - name: Prepare the locked Windows Rust toolchain
+        if: inputs.platform == 'win32-x64' && (inputs.candidate_run_id != '' || inputs.prepare_signing)
         run: |
           rust_version=$(node -p 'require("./provider/0.8.3-ling.1/source-build-inputs.json").toolchain.rustcVersion')
           rustup toolchain install "$rust_version" --profile minimal
       - name: Install the locked Windows Build Tools
-        if: inputs.candidate_run_id != '' && inputs.platform == 'win32-x64'
+        if: inputs.platform == 'win32-x64' && (inputs.candidate_run_id != '' || inputs.prepare_signing)
         shell: pwsh
         run: ./scripts/install-windows-provider-build-tools.ps1
       - name: Reverify the native outputs and prepare a lock proposal
-        if: inputs.candidate_run_id != ''
+        if: inputs.candidate_run_id != '' && !inputs.prepare_signing
         run: |
           node --input-type=module <<'NODE'
           import { join } from "node:path";
@@ -159,8 +163,62 @@ jobs:
           process.stdout.write(JSON.stringify(result, null, 2) + "\n");
           NODE
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: inputs.candidate_run_id != ''
+        if: inputs.candidate_run_id != '' && !inputs.prepare_signing
         with:
           name: source-build-promotion-${{ inputs.platform }}
           path: ${{ runner.temp }}/provider-promotion-review/
+          if-no-files-found: error
+      - name: Stage the reviewed provider for platform signing
+        if: inputs.prepare_signing
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from "node:child_process";
+          import { mkdir, readFile, writeFile } from "node:fs/promises";
+          import { dirname, join } from "node:path";
+          import { CUA_DRIVER_PACKAGE_REVISION, stageCuaDriverProvider, verifyCuaDriverSourceInput } from "./scripts/cua-driver-package-staging.mjs";
+          import { restoreDarwinCandidateExecutable } from "./scripts/cua-driver-source-build-darwin-executable.mjs";
+          import { PROVIDER_RESOURCE_ROOT, verifyProviderInputs } from "./scripts/cua-driver-source-build-lib.mjs";
+          import { verifyToolchain } from "./scripts/cua-driver-source-build-toolchain.mjs";
+          import { sha256File } from "./scripts/cua-driver-signing/signing-contract.mjs";
+
+          const { PROVIDER_TARGET: platform, GITHUB_WORKSPACE: workspace, RUNNER_TEMP: temporary } = process.env;
+          const sourceRoot = (replica) => join(workspace, "candidates", `source-build-${platform}-${replica}`);
+          if (platform === "darwin") {
+            await restoreDarwinCandidateExecutable(sourceRoot("a"));
+            await restoreDarwinCandidateExecutable(sourceRoot("b"));
+          } else {
+            const { lock } = await verifyProviderInputs(PROVIDER_RESOURCE_ROOT);
+            const { env } = await verifyToolchain(platform, lock);
+            Object.assign(process.env, env);
+          }
+
+          const second = await verifyCuaDriverSourceInput({ platform, sourceRoot: sourceRoot("b") });
+          const stage = await stageCuaDriverProvider({
+            platform, sourceRoot: sourceRoot("a"), outputRoot: join(temporary, "provider-presign-stage"),
+          });
+          const digests = Object.fromEntries(["lockSha256", "providerSha256", "licenseSha256", "noticesSha256"].map((field) => {
+            if (stage[field] !== second[field]) throw new Error(`Staged ${field} differs from the second verified build.`);
+            return [field, stage[field]];
+          }));
+
+          const output = join(temporary, "provider-signing-inputs");
+          const archive = join(output, "provider-revision.tar.gz");
+          const sourceBuild = process.env.CANDIDATE_RUN_ID
+            ? JSON.parse(await readFile(join(temporary, "provider-promotion-review", "candidate-run.json"), "utf8"))
+            : { repository: process.env.GITHUB_REPOSITORY, runId: Number(process.env.GITHUB_RUN_ID), headSha: process.env.GITHUB_SHA };
+          await mkdir(output);
+          const tar = platform === "darwin" ? "/usr/bin/tar" : join(process.env.SystemRoot, "System32", "tar.exe");
+          execFileSync(tar, ["-czf", archive, "-C", dirname(stage.providerRoot), CUA_DRIVER_PACKAGE_REVISION], { stdio: "inherit" });
+          const receipt = {
+            schemaVersion: 1, platform, revision: CUA_DRIVER_PACKAGE_REVISION, sourceBuild,
+            preparedFrom: process.env.GITHUB_SHA, files: stage.files, digests,
+            archive: { name: "provider-revision.tar.gz", sha256: await sha256File(archive) },
+          };
+          await writeFile(join(output, "signing-inputs.json"), JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
+          NODE
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: inputs.prepare_signing
+        with:
+          name: provider-signing-inputs-${{ inputs.platform }}
+          path: ${{ runner.temp }}/provider-signing-inputs/
           if-no-files-found: error

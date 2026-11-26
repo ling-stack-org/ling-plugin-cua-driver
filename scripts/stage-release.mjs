@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { cuaDriverArtifactLayoutFor, cuaDriverArtifactPlatformForRuntime } from "./cua-driver-artifact-layout.mjs";
 import { CUA_DRIVER_PACKAGE_REVISION } from "./cua-driver-package-staging-contract.mjs";
 import { validateCuaDriverProviderLockContract } from "./cua-driver-provider-lock-contract.mjs";
+import { verifyWindowsReleaseCatalog } from "./verify-windows-release-catalog.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
 const { platform, arch } = process;
@@ -25,8 +26,9 @@ const runtime = await realpath(resolve(providerArgument));
 const target = cuaDriverArtifactPlatformForRuntime(platform);
 const layout = cuaDriverArtifactLayoutFor(target);
 const lockPath = "provider-lock.json";
+const windowsCatalogPath = "win32-x64/provider-integrity.cat";
 const files = [lockPath, "LICENSE.md", "THIRD_PARTY_NOTICES.md", layout.packagedExecutableRelativePath,
-  layout.providerSealRelativePath, ...(platform === "win32" ? ["win32-x64/provider-integrity.cat"] : [])];
+  layout.providerSealRelativePath, ...(platform === "win32" ? [windowsCatalogPath] : [])];
 const digests = new Map();
 for (const file of files) {
   const path = join(runtime, file);
@@ -60,7 +62,7 @@ if (platform === "darwin") {
     `-R=anchor apple generic and certificate leaf[subject.OU] = "${team}" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists`,
     executable], { stdio: "inherit", timeout: 30_000 });
 } else {
-  const catalog = join(runtime, "win32-x64/provider-integrity.cat");
+  const catalog = join(runtime, windowsCatalogPath);
   verifyAuthenticode(executable, process.env.LING_CUA_PROVIDER_SIGNER_SHA256);
   verifyAuthenticode(catalog, process.env.LING_CUA_CATALOG_SIGNER_SHA256);
   execFileSync("signtool.exe", ["verify", "/pa", "/c", catalog, executable], { stdio: "inherit", timeout: 30_000 });
@@ -79,6 +81,10 @@ try {
     await mkdir(dirname(path), { recursive: true });
     await copyFile(join(runtime, file), path);
     if (digest(await readFile(path)) !== digests.get(file)) throw new Error(`Provider member changed during staging: ${file}`);
+  }
+  if (platform === "win32") {
+    const payload = dirname(join(destination, layout.packagedExecutableRelativePath));
+    verifyWindowsReleaseCatalog(join(destination, windowsCatalogPath), payload);
   }
   execFileSync(process.execPath, [
     join(repo, "scripts", "package-plugin.mjs"), "--root", stage, "--output", resolve(outputArgument),

@@ -27,4 +27,6 @@ corepack pnpm package:release /path/to/signed/0.8.3-ling.1 /path/to/output 0.6.1
 
 Pass the minimum Ling version supported by the reviewed runtime. On macOS, set `LING_CUA_DARWIN_EXPECTED_TEAM_ID` to the release Team ID. On Windows, use the SDK Developer shell with `signtool.exe` on PATH and set `LING_CUA_PROVIDER_SIGNER_SHA256` and `LING_CUA_CATALOG_SIGNER_SHA256` to the reviewed production certificate fingerprints.
 
+Create the Windows integrity catalog from `win32-x64/payload` after signing the executable and writing the seal. The catalog covers exactly `ling-cua-driver.exe` and `provider-seal.json`. Sign and timestamp the catalog, then place it at `win32-x64/provider-integrity.cat`. Release packaging checks catalog membership against the staged copies of both files.
+
 Build both platform archives from the same source commit. Publish them and their SHA-256 sidecars under a new stable tag matching the plugin version after completing the platform release checks. Submit the tag, source commit and both archive digests to the [official Ling catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).

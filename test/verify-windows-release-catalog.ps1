@@ -15,10 +15,12 @@ try {
   $check = @'
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
+import { verifyReleaseAuthenticode } from './scripts/cua-driver-release-seal.mjs';
 import { verifyWindowsReleaseCatalog } from './scripts/verify-windows-release-catalog.mjs';
 
 const [complete, missingSeal, payload, seal] = process.argv.slice(1);
 verifyWindowsReleaseCatalog(complete, payload);
+assert.throws(() => verifyReleaseAuthenticode(complete, '1'.repeat(64)), { status: 1 });
 assert.throws(() => verifyWindowsReleaseCatalog(missingSeal, payload), /staged provider executable and seal/);
 await writeFile(seal, 'changed seal');
 assert.throws(() => verifyWindowsReleaseCatalog(complete, payload), /staged provider executable and seal/);

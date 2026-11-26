@@ -64,11 +64,62 @@ import {
   checkCommittedCuaDriverPackageAuthorization,
   resolveCuaDriverPackageAuthorization,
 } from "../scripts/check-cua-driver-package-authorization.mjs";
+import { createSignedProviderSeal, parseDarwinReleaseIdentity } from "../scripts/cua-driver-release-seal.mjs";
 
 const execFile = promisify(execFileCallback);
 const BUILD_SCRIPT = new URL("../scripts/build-cua-driver-provider.mjs", import.meta.url).pathname;
 const VERIFY_SCRIPT = new URL("../scripts/verify-cua-driver-source-build.mjs", import.meta.url).pathname;
 const DARWIN_REPRODUCIBILITY_DIAGNOSTIC = new URL("../scripts/diagnose-cua-driver-darwin-reproducibility.mjs", import.meta.url).pathname;
+
+test("production seals bind the Desktop layout and compatibility fields to the promoted lock", async () => {
+  const distribution = JSON.parse(await readFile(join(PROVIDER_RESOURCE_ROOT, "provider-lock.json"), "utf8"));
+  const lockSha256 = "1".repeat(64);
+  const providerSha256 = "2".repeat(64);
+  const teamId = "TESTTEAM01";
+  const codeIdentifier = "com.lingstack.desktop.cua-driver";
+  const cdhash = "a".repeat(40);
+  const designatedRequirement = `identifier "${codeIdentifier}" and anchor apple generic`;
+  const details = [
+    `Identifier=${codeIdentifier}`, "CodeDirectory v=20500 size=1024 flags=0x10000(runtime)",
+    `TeamIdentifier=${teamId}`, `CDHash=${cdhash}`,
+  ].join("\n");
+  const requirements = `designated => ${designatedRequirement}\n`;
+  const darwin = createSignedProviderSeal({
+    platform: "darwin", distribution, lockSha256, providerSha256,
+    identity: parseDarwinReleaseIdentity(details, requirements, teamId),
+  });
+  assert.deepEqual(darwin, {
+    schemaVersion: 1, platform: "darwin", componentId: "cua-driver-darwin", lockSha256,
+    distributionRevision: "ling.1", providerVersion: "0.8.3", serverInitializeProtocolVersion: "2025-06-18",
+    healthSchemaVersion: "1", toolsListCanonicalSha256: distribution.platforms.darwin.compatibility.toolsListSha256,
+    stateSchemaVersion: 1, signingTier: "production_signed", distributionChannel: "production", productionEligible: true,
+    executableRelativePath: "ling-cua-driver", executableSha256: providerSha256, architectures: ["arm64"],
+    cdhashes: { arm64: cdhash }, codeIdentifier, teamId, designatedRequirement,
+    designatedRequirementSha256: sha256Text(designatedRequirement), hardenedRuntime: true,
+    entitlementsCanonicalSha256: distribution.platforms.darwin.binary.requiredEntitlementsCanonicalSha256,
+  });
+  const signerSubject = "CN=Provider Test";
+  const certificateSha256 = "3".repeat(64);
+  const windows = createSignedProviderSeal({
+    platform: "win32", distribution, lockSha256, providerSha256, identity: { signerSubject, certificateSha256 },
+  });
+  assert.deepEqual(windows, {
+    schemaVersion: 2, platform: "win32", componentId: "cua-driver-win32-x64", lockSha256,
+    distributionRevision: "ling.1", providerVersion: "0.8.3", serverInitializeProtocolVersion: "2025-06-18",
+    healthSchemaVersion: "1", toolsListCanonicalSha256: distribution.platforms.win32X64.compatibility.toolsListSha256,
+    stateSchemaVersion: 1, signingTier: "production_signed", distributionChannel: "production", productionEligible: true,
+    limitations: ["elevated_pixel_input", "uwp_send_input"],
+    main: {
+      relativePath: "payload/ling-cua-driver.exe", sha256: providerSha256, architecture: "x86_64",
+      peManifestCanonicalSha256: distribution.platforms.win32X64.binary.mainManifestCanonicalSha256,
+      authenticodeStatus: "Valid", signerSubject, certificateSha256, timestampPolicy: "rfc3161-required", timestampStatus: "Valid",
+    },
+    integrityCatalogRelativePath: "provider-integrity.cat",
+  });
+  assert.throws(() => parseDarwinReleaseIdentity(details, requirements, "OTHERTEAM1"), /expected hardened provider identity/u);
+  assert.throws(() => parseDarwinReleaseIdentity(details.replace("(runtime)", "(adhoc)"), requirements, teamId), /expected hardened provider identity/u);
+  assert.throws(() => parseDarwinReleaseIdentity(details, "", teamId), /expected hardened provider identity/u);
+});
 
 test("provider lock is the exact V2 contract and remains fail-closed", async () => {
   const lock = JSON.parse(await readFile(join(PROVIDER_RESOURCE_ROOT, "provider-lock.json"), "utf8"));

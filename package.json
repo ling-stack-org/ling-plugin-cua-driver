@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "seal:release": "node scripts/seal-release.mjs",
     "package:release": "node scripts/stage-release.mjs",
     "test": "node --test test/*.test.mjs"
   },

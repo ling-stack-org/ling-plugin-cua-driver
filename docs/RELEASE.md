@@ -22,19 +22,28 @@ The native workflow validates each candidate attestation and repeats the executa
 
 Run the [Provider native build workflow](https://github.com/ling-stack-org/ling-plugin-cua-driver/actions/workflows/provider-build.yml) for the target with `prepare_signing=true`. Supply `candidate_run_id` to reuse a successful A/B run from this repository. With an empty run ID the workflow builds a fresh pair. The workflow requires the two outputs to match the committed platform lock before staging the executable, lock, license and notices.
 
-Download `provider-signing-inputs-<platform>` from the run. Check the SHA-256 of `provider-revision.tar.gz` against `signing-inputs.json` and extract it in the protected signing environment. The tar preserves the macOS executable mode and provides the `0.8.3-ling.1` revision directory. Sign the executable and create its provider seal there. Keep the signing-input receipt with the platform signing evidence.
+Download `provider-signing-inputs-<platform>` from the run. Check the SHA-256 of `provider-revision.tar.gz` against `signing-inputs.json` and extract it in the protected signing environment. The tar preserves the macOS executable mode and provides the `0.8.3-ling.1` revision directory. Keep the signing-input receipt with the platform signing evidence.
 
 ## Package the signed provider
 
-Build the release archive on the corresponding target after approving the source build and signing its native runtime. The signed revision directory contains the promoted lock, license, notices, platform executable and provider seal. Windows also includes the signed integrity catalog. The packaging command verifies the promoted lock, sealed digests and the platform signatures before archiving the selected files.
+After approving the source build, sign the native executable in the revision directory on its target platform.
+
+- On macOS, sign `darwin/ling-cua-driver` with the release Developer ID, a secure timestamp, hardened runtime and the identifier `com.lingstack.desktop.cua-driver`. Use the entitlements in the promoted lock's `platforms.darwin.binary.requiredEntitlements`, and retain the Apple notarization evidence for the final distribution.
+- On Windows, apply and timestamp the production Authenticode signature on `win32-x64/payload/ling-cua-driver.exe`. Use the SDK Developer shell with `signtool.exe` on PATH.
+
+Set `LING_CUA_DARWIN_EXPECTED_TEAM_ID` to the reviewed release Team ID on macOS. On Windows, set `LING_CUA_PROVIDER_SIGNER_SHA256` and `LING_CUA_CATALOG_SIGNER_SHA256` to the reviewed production certificate fingerprints. Run `seal:release` after signing the executable. It reads the platform signature and promoted lock and writes `provider-seal.json` beside the executable.
 
 ```sh
 corepack pnpm install --frozen-lockfile
-corepack pnpm package:release /path/to/signed/0.8.3-ling.1 /path/to/output 0.6.1
+corepack pnpm seal:release /path/to/signed/0.8.3-ling.1
 ```
 
-Pass the minimum Ling version supported by the reviewed runtime. On macOS, set `LING_CUA_DARWIN_EXPECTED_TEAM_ID` to the release Team ID. On Windows, use the SDK Developer shell with `signtool.exe` on PATH and set `LING_CUA_PROVIDER_SIGNER_SHA256` and `LING_CUA_CATALOG_SIGNER_SHA256` to the reviewed production certificate fingerprints.
-
 Create the Windows integrity catalog from `win32-x64/payload` after signing the executable and writing the seal. The catalog covers exactly `ling-cua-driver.exe` and `provider-seal.json`. Sign and timestamp the catalog, then place it at `win32-x64/provider-integrity.cat`. Release packaging checks catalog membership against the staged copies of both files.
+
+Pass the minimum Ling version supported by the reviewed runtime. The packaging command rechecks the staged signature, seal and lock before writing the archive.
+
+```sh
+corepack pnpm package:release /path/to/signed/0.8.3-ling.1 /path/to/output 0.6.1
+```
 
 Build both platform archives from the same source commit. Publish them and their SHA-256 sidecars under a new stable tag matching the plugin version after completing the platform release checks. Submit the tag, source commit and both archive digests to the [official Ling catalog](https://github.com/ling-stack-org/ling-stack/blob/main/docs/design/plugin-independent-packaging.md).

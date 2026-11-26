@@ -20,3 +20,16 @@ jobs:
           node-version: 22.22.1
       - run: node scripts/build-cua-driver-provider.mjs --verify-only --platform darwin --output-dir "$RUNNER_TEMP/provider-verify"
       - run: node --test test/*.test.mjs
+
+  windows-catalog:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22.22.1
+      - name: Validate provider catalog coverage
+        shell: powershell
+        run: ./test/verify-windows-release-catalog.ps1

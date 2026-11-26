@@ -561,6 +561,7 @@ test("reference downloader enforces exact bytes, digest and per-attempt deadline
         join(root, "stalled.bin"),
         expected,
         async (_url, { signal }) => new Promise((_resolve, reject) => {
+          signal.throwIfAborted();
           signal.addEventListener("abort", () => reject(signal.reason), { once: true });
         }),
         5,
